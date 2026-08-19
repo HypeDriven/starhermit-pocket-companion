@@ -1,0 +1,12 @@
+{
+  "name": "pocket-companion",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "A cozy companion-care game: feed, clean, entertain, and rest Mote.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/run.mjs",
+    "validate-content": "node tests/validate-content.mjs"
+  }
+}
