@@ -5,6 +5,16 @@
  */
 import { makeRng } from './rules.js';
 
+/** Captions mirrored from the synth cases so sample playback keeps them. */
+const EVENT_CAPTIONS = {
+  invalid: 'not allowed', feed: 'munch munch', wash: 'splish splash',
+  play: 'boing!', rest: 'zzz…', pet: 'purr', sing: 'la la la',
+  toss: 'wheee!', snack: 'nom', decorate: 'placed!',
+  craving: 'Mote wishes for something…', 'craving-met': 'wish granted!',
+  discovery: 'new discovery!', 'bond-up': 'bond level up!',
+  complete: 'session complete!', expired: 'time is up', neglected: 'Mote needs you',
+};
+
 export class AudioEngine {
   constructor(getSettings) {
     this.getSettings = getSettings;
@@ -15,6 +25,9 @@ export class AudioEngine {
     this._musicStep = 0;
     this._pendingUnlock = () => this.unlock();
     this.onCaption = null; // (text) => void
+    this._sfxMap = null;      // event name -> sample basename (from sfx/manifest.json)
+    this._sfxLoading = new Map(); // basename -> Promise<AudioBuffer|null>
+    this._sfxBuffers = new Map(); // basename -> AudioBuffer
   }
 
   /** Must be called from a user gesture. Idempotent. */
@@ -37,6 +50,54 @@ export class AudioEngine {
     document.removeEventListener('keydown', this._pendingUnlock);
     this._startAmbience();
     this._startMusic();
+    this._loadSfxManifest();
+  }
+
+  /** Fetch the authored sample manifest once (after the gesture unlock). */
+  _loadSfxManifest() {
+    fetch('sfx/manifest.json')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => {
+        this._sfxMap = new Map();
+        if (Array.isArray(list)) {
+          for (const e of list) {
+            if (e && typeof e.name === 'string' && typeof e.event === 'string') this._sfxMap.set(e.event, e.name);
+          }
+        }
+      })
+      .catch(() => { this._sfxMap = new Map(); });
+  }
+
+  /** Lazy-fetch/decode/cache a sample; resolves to null on failure. */
+  _sfxBuffer(name) {
+    let p = this._sfxLoading.get(name);
+    if (!p) {
+      p = fetch(`sfx/${name}.opus`)
+        .then((r) => { if (!r.ok) throw new Error('sfx-missing'); return r.arrayBuffer(); })
+        .then((ab) => this.ctx.decodeAudioData(ab))
+        .then((buf) => { this._sfxBuffers.set(name, buf); return buf; })
+        .catch(() => null);
+      this._sfxLoading.set(name, p);
+    }
+    return p;
+  }
+
+  /**
+   * Play the authored sample mapped to an event, if decoded and ready.
+   * Returns false (caller falls back to synthesis) while loading or on failure.
+   */
+  _trySample(name) {
+    if (!this.ctx || !this._sfxMap || !this._sfxMap.has(name)) return false;
+    const sample = this._sfxMap.get(name);
+    const buf = this._sfxBuffers.get(sample);
+    if (!buf) { this._sfxBuffer(sample); return false; } // load for next time; synth now
+    const caption = EVENT_CAPTIONS[name];
+    if (caption) this._caption(caption);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(this.buses.effects || this.master);
+    src.start();
+    return true;
   }
 
   armUnlockOnGesture() {
@@ -80,6 +141,7 @@ export class AudioEngine {
 
   /** Map logical events to sounds (event hierarchy: ack < move < goal < round). */
   event(name, seed = 0) {
+    if (this._trySample(name)) return; // authored sample wins; synth is the fallback
     switch (name) {
       case 'ack': this.blip({ freq: 660, dur: 0.07, gain: 0.25, variantSeed: seed }); break;
       case 'invalid': this.blip({ type: 'square', freq: 180, dur: 0.12, gain: 0.2, slide: -60, caption: 'not allowed' }); break;

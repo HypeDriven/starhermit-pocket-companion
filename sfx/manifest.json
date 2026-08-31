@@ -1,0 +1,22 @@
+[
+  { "name": "ack", "seconds": 1, "prompt": "A single short soft UI bubble pop, gentle rounded click confirming a small action.", "event": "ack" },
+  { "name": "invalid", "seconds": 1, "prompt": "A dull muted error thunk, low wooden knock with a short soft buzz, clearly negative but not harsh.", "event": "invalid" },
+  { "name": "feed", "seconds": 2, "prompt": "Cartoon munching: two or three happy crunchy bites on crisp food, cute creature eating.", "event": "feed" },
+  { "name": "wash", "seconds": 2, "prompt": "Water splashing in a small tub with bubbly scrubbing and a quick rinsing trickle.", "event": "wash" },
+  { "name": "play", "seconds": 1, "prompt": "A rubber ball boing, springy cartoon bounce with a bright playful wobble.", "event": "play" },
+  { "name": "rest", "seconds": 2, "prompt": "A soft sleepy yawn and slow relaxed exhale, cozy bedding rustle, winding down to sleep.", "event": "rest" },
+  { "name": "pet", "seconds": 1, "prompt": "A short warm cat purr trill, soft contented vibrating rumble rising slightly at the end.", "event": "pet" },
+  { "name": "sing", "seconds": 2, "prompt": "Three cheerful rising notes whistled by a small bird-like creature, bright and melodic.", "event": "sing" },
+  { "name": "toss", "seconds": 1, "prompt": "A quick airy whoosh of a light soft toy thrown through the air, ending with a faint flump.", "event": "toss" },
+  { "name": "snack", "seconds": 1, "prompt": "One quick delighted nom bite, small crisp crunch with a tiny lip smack.", "event": "snack" },
+  { "name": "decorate", "seconds": 1, "prompt": "A small wooden object being placed on a table, soft clunk followed by a tiny pleasant chime.", "event": "decorate" },
+  { "name": "craving", "seconds": 1, "prompt": "A cute small creature squeak rising in pitch like a question, hopeful and pleading.", "event": "craving" },
+  { "name": "craving-met", "seconds": 1, "prompt": "A bright happy two-note chime, sparkling wish-granted ding with a light shimmer.", "event": "craving-met" },
+  { "name": "discovery", "seconds": 2, "prompt": "A sparkling three-note glockenspiel reveal, magical twinkle ascending with soft shimmer tail.", "event": "discovery" },
+  { "name": "bond-up", "seconds": 2, "prompt": "A warm ascending four-note harp fanfare, gentle celebratory glow, heartfelt and cozy.", "event": "bond-up" },
+  { "name": "complete", "seconds": 3, "prompt": "A cheerful five-note ascending victory jingle on bells and mallets, bright satisfying finish.", "event": "complete" },
+  { "name": "expired", "seconds": 2, "prompt": "A soft descending three-note sad trombone-like tone, gentle time-is-up letdown, not harsh.", "event": "expired" },
+  { "name": "neglected", "seconds": 2, "prompt": "A low worried creature whimper motif in three descending notes, lonely and pleading.", "event": "neglected" },
+  { "name": "ui-open", "seconds": 1, "prompt": "A very short soft interface click pop with a slight rising pitch, panel opening.", "event": "ui-open" },
+  { "name": "ui-close", "seconds": 1, "prompt": "A very short soft interface click pop with a slight falling pitch, panel closing.", "event": "ui-close" }
+]
