@@ -1,4 +1,8 @@
-<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='hsl(152 60% 55%)'/><stop offset='1' stop-color='hsl(152 60% 40%)'/></linearGradient></defs>
-<rect width='64' height='64' rx='14' fill='url(#g)'/>
-<text x='32' y='44' font-size='34' text-anchor='middle' fill='#ffffff' font-family='Verdana,sans-serif' font-weight='bold'>P</text>
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+  <rect width='64' height='64' rx='13' fill='#241d2b'/>
+  <path d='M47 22 C43 17.5 37.5 14 37.5 9.8 C37.5 7 39.8 5.2 42.5 5.2 C44.5 5.2 46 6.2 47 8 C48 6.2 49.5 5.2 51.5 5.2 C54.2 5.2 56.5 7 56.5 9.8 C56.5 14 51 17.5 47 22 Z' fill='#e08ab0'/>
+  <circle cx='29' cy='38' r='18' fill='#ffb65c'/>
+  <circle cx='22.5' cy='34' r='3.2' fill='#241d2b'/>
+  <circle cx='35.5' cy='34' r='3.2' fill='#241d2b'/>
+  <ellipse cx='29' cy='46' rx='8' ry='5.5' fill='#8fd3a0'/>
 </svg>
