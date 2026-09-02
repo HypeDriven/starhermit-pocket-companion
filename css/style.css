@@ -197,9 +197,9 @@ body[data-motion="reduced"] .hero-mote { animation: none; }
     grid-template-rows: auto 1fr auto;
     grid-template-areas: "left" "field" "tray";
   }
-  #hud-left { grid-area: left; flex-direction: row !important; overflow-x: auto; padding: 6px calc(8px + var(--safe-right)) 6px calc(8px + var(--safe-left)) !important; }
-  #hud-left .hud-block { min-width: 200px; padding: 8px 10px; }
-  #hud-left .hud-block:first-child { min-width: 240px; }
+  #hud-left { grid-area: left; flex-direction: row !important; flex-wrap: wrap; overflow-x: visible; padding: 6px calc(8px + var(--safe-right)) 6px calc(8px + var(--safe-left)) !important; }
+  #hud-left .hud-block { min-width: 0; flex: 1 1 140px; padding: 8px 10px; }
+  #hud-left #needs-panel { flex-basis: 100%; }
   #hud-right { display: none; } /* reachable via pause sheet */
   #playfield { grid-area: field; }
   #action-tray {
