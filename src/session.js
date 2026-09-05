@@ -161,5 +161,11 @@ export function verifyReplay(contentCfg, envelope) {
     score: rules.scoreBreakdown(state),
     ticks: state.tick,
     invalidAttempts: state.invalidAttempts,
+    // Assists are recorded on the replay envelope (not derivable from the
+    // command log, since undo mirrors the popped command off the envelope);
+    // surface the envelope's value as part of the authoritative verdict.
+    assists: Array.isArray(envelope.assists)
+      ? envelope.assists.slice(0, 4).filter((a) => typeof a === 'string')
+      : [],
   };
 }

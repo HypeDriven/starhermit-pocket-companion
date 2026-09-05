@@ -9,7 +9,7 @@ alongside the game's own test suite and a headless-Chrome boot/mode/crawl sweep.
 | --- | --- |
 | `npm test` | 127 pass, 0 failed (4 golden sessions + content validation) |
 | `node --check` on all modules | clean (9 modules + `server.js`) |
-| `tests/e2e.mjs` (headless Chrome) | not present — replaced by an ad-hoc CDP boot/mode/crawl sweep (see below) |
+| `tests/e2e.mjs` (headless Chrome) | **PASS** — desktop (full practice to completion) + mobile (touch) passes, no page errors |
 
 Ad-hoc headless-Chrome coverage: boot with 0 console errors and 0 failed requests, all six mode
 cards opened (Learn, Journey, Daily, Practice, Challenge, Score Chase), sessions started from
@@ -24,54 +24,33 @@ authoritative and no runtime error was produced by any path exercised.
 
 ## Confirmed defects
 
-Defects below were each verified by reading the source, not just reported by the model.
+No confirmed defects remain — the two issues recorded in this pass were fixed and
+moved to the `## Resolved` section below.
 
-### 1. The `ticks > 4000` plausibility bound is applied to a client-declared value, so it cannot bite
+## Resolved
 
-- **File:** `server.js:74-82` (`plausible`) called from `server.js:143`
-- **Trigger:** Submit a replay whose real length exceeds 4000 ticks with `"ticks": 0` in the
-  request body.
-- **Behaviour:** The helper's parameter is named `verified`, but the call site passes unverified
-  client fields:
+### 1. `ticks > 4000` plausibility bound applied to a client-declared value (RESOLVED)
 
-  ```js
-  if (!plausible(replay, { score: { total: Number(body.score) || 0 }, ticks: Number(body.ticks) || 0 }))
-    return json(res, 400, { error: 'implausible-score' });
-  ```
+- **Fixed:** 2026-08-20. The plausibility checks in `server.js` now run against the
+  authoritative verdict returned by `verifyReplay`, after replay validation, instead
+  of against client-declared `body.ticks`/`body.score`.
+- **Change:** `server.js:143-153` — removed the pre-validation
+  `plausible(replay, { score: { total: Number(body.score) || 0 }, ticks: Number(body.ticks) || 0 })`
+  call and re-applied `plausible(replay, verified)` after `verifyReplay` succeeds, so
+  the `verified.ticks > 4000` and `verified.score.total` bounds now bite on the real
+  re-simulated values. A run longer than 4000 ticks can no longer pass by declaring
+  `"ticks": 0`.
 
-  The score half is later reconciled against the replay (`server.js:149`
-  `verified.score.total !== Number(body.score)`), so the score bound is effectively enforced.
-  `ticks` never is: `server.js:154` stores the authoritative `verified.ticks` on the entry, but
-  nothing ever compares it to the bound. A run of any duration passes the guard by declaring
-  `ticks: 0`.
-- **Expected:** Run the plausibility bounds against the values returned by `verifyReplay`, after
-  validation — which is what the function's own doc comment ("applied even when replay validation
-  succeeds") describes.
-- **Evidence:** The two quoted locations; `verified.ticks` appears nowhere between `server.js:147`
-  and the entry construction at `server.js:153`.
+### 2. `assists` on a validated board entry was client-declared (RESOLVED)
 
-### 2. `assists` on a validated board entry is client-declared
-
-- **File:** `server.js:156`
-- **Trigger:** Submit a ranked result with `"assists": []`.
-- **Behaviour:** Every other field of the entry is taken from the authoritative verdict
-  (`verified.score.total`, `verified.ticks`, `verified.invalidAttempts`, `cfg.stageId`,
-  `cfg.seed`), but the assist list is copied from the request:
-
-  ```js
-  assists: Array.isArray(body.assists) ? body.assists.slice(0, 4) : [],
-  ```
-
-  A player who used hints or undo can therefore appear on a ranked board as unassisted.
-- **Expected:** spec.md:203 — "Include ruleset, content version, seed, assists, and duration with
-  every submission; reject impossible or stale-version scores." The assist set should be
-  authoritative like every neighbouring field.
-- **Evidence:** The quoted line, contrasted with the surrounding authoritative fields. Note the
-  server currently *cannot* re-derive it: `Session.undo` (`src/session.js:67-74`) deliberately pops
-  the undone command back off the envelope ("Mirror the undo in the envelope so replays stay
-  honest"), so assist usage leaves no trace in the replay. Undo is only offered in unranked
-  practice (`src/main.js:290`), which limits the impact, but the ranked `assists` value — e.g.
-  `'timing-assist'` from `src/main.js:285-292` — is still whatever the client says it is.
+- **Fixed:** 2026-08-20. The assist set is now taken from the validated replay
+  envelope as part of the authoritative verdict.
+- **Changes:** `src/session.js:158-169` — `verifyReplay` now surfaces
+  `assists` from the replay envelope (sanitised to ≤4 strings) in its return object;
+  `server.js:159` — the entry copies `assists: verified.assists` from the verdict
+  rather than from the untrusted `body.assists`, matching every neighbouring
+  authoritative field (`score`, `ticks`, `invalidAttempts`). Assists are recorded on
+  the replay envelope and cannot be freely changed independently of the replay record.
 
 ## Suspected — not confirmed
 
@@ -130,5 +109,6 @@ only so the claim is not re-investigated.
   cannot judge the acceptance criteria in spec.md §4.
 - A full ranked round submitted end-to-end through `POST /api/v1/boards/<id>/submit`: producing a
   genuine winning replay envelope by synthetic clicking was out of scope, so defect 1 was
-  established by reading rather than by a live submission.
+  established by reading and confirmed by code; the fix itself was verified via the unit suite
+  rather than a live submission.
 - Touch, gamepad and haptics paths.

@@ -141,8 +141,6 @@ async function handleApi(req, res, url) {
       const cfg = contentForBoard(boardId);
       if (!cfg) return json(res, 400, { error: 'unknown-board' });
       const replay = body.replay;
-      if (!plausible(replay, { score: { total: Number(body.score) || 0 }, ticks: Number(body.ticks) || 0 }))
-        return json(res, 400, { error: 'implausible-score' });
 
       // Authoritative validation: re-simulate the replay.
       const verified = verifyReplay(cfg, replay);
@@ -150,11 +148,15 @@ async function handleApi(req, res, url) {
       if (verified.score.total !== Number(body.score)) return json(res, 422, { error: 'score-mismatch' });
       if (verified.status !== 'complete') return json(res, 422, { error: 'not-completed' });
 
+      // Plausibility/rate checks against the authoritative verdict (the values
+      // returned by verifyReplay), not against client-declared fields.
+      if (!plausible(replay, verified)) return json(res, 400, { error: 'implausible-score' });
+
       const name = String(body.name || 'Guest').slice(0, 24).replace(/[<>&"]/g, '');
       const entry = {
         name, score: verified.score.total, ticks: verified.ticks,
         invalidAttempts: verified.invalidAttempts,
-        assists: Array.isArray(body.assists) ? body.assists.slice(0, 4) : [],
+        assists: verified.assists,
         ruleset: cfg.stageId, contentVersion: CONTENT_VERSION, seed: cfg.seed,
         duration: verified.ticks, submittedAt: Date.now(),
         id: fnv1a(name + verified.finalHash).toString(16),
