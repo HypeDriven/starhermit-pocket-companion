@@ -29,6 +29,38 @@ moved to the `## Resolved` section below.
 
 ## Resolved
 
+### 0. Review pass 2026-09-07 (Kimi) — five defects fixed
+
+- **Auto-pause soft lock (RESOLVED):** `visibilitychange` backgrounding called
+  `_pause(true)`, which skipped opening the pause sheet. On return there was no way to
+  resume — the Pause button is a no-op while `machine === 'paused'` and Escape only
+  re-entered `_pause`. All controls were dead. `_pause` now always opens the pause
+  overlay (`src/main.js`), so backgrounding shows "Paused / Resume" on return.
+  Verified in headless Chrome by simulating `document.hidden` + `visibilitychange`
+  (`tests/smoke-pause.mjs`).
+- **Daily replays were still ranked (RESOLVED):** the setup screen told the player
+  "replays are casual" after completing today's daily, but `_startMode`/`_beginSession`
+  still marked the session ranked, allowing repeat validated submissions to today's
+  board. Both paths now gate on the stored completion (`src/main.js`). Verified in
+  headless Chrome: replaying a completed daily shows the "Casual — not ranked" badge.
+- **Snapshot resume dropped session options (RESOLVED):** `Session.restore` was called
+  without `undo`/`ranked`, so a resumed practice session lost undo and a resumed
+  ranked session silently became casual. `_offerResume` now restores both
+  (`src/main.js`). Verified: undo works after a reload-resume (`tests/smoke-pause.mjs`).
+- **Malformed daily board id crashed the API (RESOLVED):** `contentForBoard` passed any
+  `daily:<arg>` straight to `dailyConfig`, which indexes a weekday table — a malformed
+  key produced `NaN` and a 500. Board ids are now validated (`^\d{4}-\d{2}-\d{2}$` +
+  parseable date) and rejected with 400 (`server.js`). Verified with curl.
+- **Undo reachable after session end (RESOLVED):** pressing `U` on the results screen
+  of a practice session rewound the state but left the terminal envelope stale. `_undo`
+  now requires an active/paused machine (`src/main.js`).
+- Housekeeping: per-session `decorSeed` is now set before `setTheme`/`setDecor` so the
+  deterministic decor layout actually varies by session (`src/main.js`); rebuilding the
+  room no longer re-shows props hidden by the low quality tier (`src/render.js`);
+  duplicate inline favicon removed (`index.html`); `LICENSE.md` (PolyForm
+  Noncommercial 1.0.0) added per root instructions; QA test entries in
+  `data/leaderboards.json` reset to `{}`.
+
 ### 1. `ticks > 4000` plausibility bound applied to a client-declared value (RESOLVED)
 
 - **Fixed:** 2026-08-20. The plausibility checks in `server.js` now run against the
@@ -112,3 +144,5 @@ only so the claim is not re-investigated.
   established by reading and confirmed by code; the fix itself was verified via the unit suite
   rather than a live submission.
 - Touch, gamepad and haptics paths.
+
+Parent review: Existing leaderboard data was restored locally and excluded from version control. Daily identifiers reject rolled-over dates and extra components; malformed URL escapes return 400, and private static paths are blocked.

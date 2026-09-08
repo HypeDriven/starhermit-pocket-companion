@@ -115,7 +115,14 @@ class Game {
     card.innerHTML = `<strong>Resume session</strong><span class="card-sub">${cfg.name} · tick ${snap.snapshot.tick ?? 0}</span>`;
     card.addEventListener('click', () => {
       try {
-        const { session, away } = Session.restore(cfg, snap.snapshot, { mode: snap.mode, envelope: snap.envelope });
+        const { session, away } = Session.restore(cfg, snap.snapshot, {
+          mode: snap.mode,
+          envelope: snap.envelope,
+          undo: snap.mode === 'practice' || snap.mode === 'learn',
+          ranked: this._isRankable()
+            && !(snap.mode === 'daily' && cfg.dailyKey && this.store.profile.daily[cfg.dailyKey])
+            && (snap.mode === 'daily' || snap.mode === 'challenge' || snap.mode === 'chase'),
+        });
         this.session = session;
         this.mode = snap.mode;
         this._enterPlayfield(cfg);
@@ -202,7 +209,7 @@ class Game {
       const cfg = content.dailyConfig(content.dailyKeyFor(new Date(this.platform.now())));
       const done = this.store.profile.daily[cfg.dailyKey];
       this._prepare(cfg, {
-        ranked: this._isRankable(),
+        ranked: this._isRankable() && !done,
         extra: done ? `<p class="muted">You already completed today's challenge (${done.score} pts) — replays are casual.</p>` : '',
       });
     } else if (mode === 'practice') {
@@ -288,7 +295,8 @@ class Game {
       assists.push('timing-assist');
     }
     const undo = this.mode === 'practice' || this.mode === 'learn';
-    const ranked = this._isRankable() && (this.mode === 'daily' || this.mode === 'challenge' || this.mode === 'chase');
+    const dailyDone = this.mode === 'daily' && cfg.dailyKey && !!this.store.profile.daily[cfg.dailyKey];
+    const ranked = this._isRankable() && !dailyDone && (this.mode === 'daily' || this.mode === 'challenge' || this.mode === 'chase');
     this.session = new Session(cfg, { mode: this.mode, undo, ranked, timestampOffset: this.platform.timeOffset, assists });
     this.lastSetup = { cfg, mode: this.mode };
     this.store.clearSessionSnapshot();
@@ -308,9 +316,10 @@ class Game {
     this.ui.el('btn-undo').style.display = this.session.undoEnabled ? '' : 'none';
     this.ui.setCompatMessage(!this.renderer);
     if (this.renderer) {
+      // Seed first: setTheme/setDecor derive deterministic layouts from it.
+      this.renderer.decorSeed = cfg.seed;
       this.renderer.setTheme(cfg.theme || content.DEFAULT_THEME);
       this.renderer.setDecor(this.session.state.decorPlaced);
-      this.renderer.decorSeed = cfg.seed;
       this.renderer.setMood(rules.moodOf(this.session.state));
     }
     this.ui.renderHelp(this.session.legal, this.store.profile.settings.keybinds);
@@ -426,6 +435,7 @@ class Game {
 
   _undo() {
     if (!this.session || !this.session.undoEnabled) return;
+    if (this.machine !== 'active' && this.machine !== 'paused') return;
     if (this.session.undo()) {
       this.audio.event('ui-close');
       this.ui.toast('Undone');
@@ -471,7 +481,9 @@ class Game {
     if (!this.session || this.machine !== 'active') return;
     this.machine = 'paused';
     this.session.markAwayBaseline();
-    if (!auto) this.ui.openOverlay('pause');
+    // Auto-pause (tab backgrounded) must also show the pause sheet —
+    // otherwise there is no Resume control when the player returns.
+    this.ui.openOverlay('pause');
     this.audio.event('ui-open');
   }
 

@@ -191,6 +191,8 @@ export class Renderer3D {
     this.roomGroup = g;
     this.scene.add(g);
     if (this._placedDecor) this.setDecor(this._placedDecor);
+    // Rebuilding the room must not resurrect props hidden by the quality tier.
+    if (this._propGroup) this._propGroup.visible = QUALITY[this.tier].envDetail > 0.5;
     this.key.color.set(p.key);
     this.lamp.color.set(p.glow);
   }

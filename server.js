@@ -65,8 +65,14 @@ function readBody(req) {
 
 /** Resolve a board id to its content config (authoritative side). */
 function contentForBoard(boardId) {
-  const [kind, arg] = boardId.split(':');
-  if (kind === 'daily') return dailyConfig(arg);
+  const [kind, arg, extra] = boardId.split(':');
+  if (extra !== undefined) return null;
+  if (kind === 'daily') {
+    // dailyConfig indexes a weekday table — reject malformed day keys instead
+    // of throwing (a bad key would otherwise turn into a 500).
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(arg || '') || !Number.isFinite(Date.parse(arg + 'T00:00:00Z')) || new Date(arg + 'T00:00:00Z').toISOString().slice(0, 10) !== arg) return null;
+    return dailyConfig(arg);
+  }
   if (kind === 'chase') return scoreChaseConfig(Number(arg) >>> 0);
   if (kind === 'stage') return getStage(arg) || challengeConfig(arg);
   return null;
@@ -128,7 +134,8 @@ async function handleApi(req, res, url) {
 
   const boardMatch = url.pathname.match(/^\/api\/v1\/boards\/([^/]+)(\/submit)?$/);
   if (boardMatch) {
-    const boardId = decodeURIComponent(boardMatch[1]);
+    let boardId;
+    try { boardId = decodeURIComponent(boardMatch[1]); } catch { return json(res, 400, { error: 'bad-board' }); }
     const isSubmit = !!boardMatch[2];
 
     if (isSubmit) {
@@ -181,7 +188,9 @@ async function handleApi(req, res, url) {
 
 /* ---------------- static ---------------- */
 async function serveStatic(req, res, url) {
-  let path = decodeURIComponent(url.pathname);
+  let path;
+  try { path = decodeURIComponent(url.pathname); } catch { return json(res, 400, { error: 'bad-path' }); }
+  if (path.split(/[\\/]/).some(p => p.startsWith('.'))) return json(res, 403, { error: 'forbidden' });
   if (path === '/') path = '/index.html';
   const file = normalize(join(ROOT, path));
   if (!file.startsWith(ROOT) || file.includes('data' + '/') || path.endsWith('server.js')) {
