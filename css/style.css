@@ -191,6 +191,10 @@ body[data-motion="reduced"] .hero-mote { animation: none; }
   #action-tray { grid-area: tray; flex-direction: row; justify-content: center; flex-wrap: wrap; }
 }
 
+/* Mobile pause/menu button: hidden where the right rail carries Pause */
+.pause-mobile { display: none; position: absolute; top: 8px; right: 8px; z-index: 6; min-width: 44px; min-height: 44px; padding: 0; font-size: 1.1em; }
+@media (max-width: 700px), (max-width: 900px) and (orientation: landscape) and (max-height: 500px) { .pause-mobile { display: inline-flex; align-items: center; justify-content: center; } }
+
 /* Portrait mobile: status top, playfield, thumb tray bottom */
 @media (max-width: 700px) and (orientation: portrait) {
   #screen-game.active {
@@ -201,8 +205,10 @@ body[data-motion="reduced"] .hero-mote { animation: none; }
   #hud-left { grid-area: left; flex-direction: row !important; flex-wrap: wrap; overflow-x: visible; padding: 6px calc(8px + var(--safe-right)) 6px calc(8px + var(--safe-left)) !important; }
   #hud-left .hud-block { min-width: 0; flex: 1 1 140px; padding: 8px 10px; }
   #hud-left #needs-panel { flex-basis: 100%; }
-  #hud-right { display: none; } /* reachable via pause sheet */
+  #hud-right { display: none; } /* reachable via the mobile pause button */
   #playfield { grid-area: field; }
+  /* lesson card: full width at the top of the playfield (never over the needs), compact text */
+  #playfield .lesson-banner { top: 6px; left: 6px; right: 6px; transform: none; max-width: none; padding: 8px 12px; font-size: 0.9em; }
   #action-tray {
     grid-area: tray; flex-direction: row; overflow-x: auto;
     padding: 8px calc(8px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(8px + var(--safe-left));
@@ -216,10 +222,14 @@ body[data-motion="reduced"] .hero-mote { animation: none; }
     grid-template-rows: 1fr auto;
     grid-template-areas: "left field" "tray tray";
   }
-  #hud-left { grid-area: left; padding: 4px !important; }
-  #hud-left .hud-block { padding: 6px 8px; }
+  #hud-left { grid-area: left; padding: 4px !important; flex-direction: column !important; overflow-x: hidden; overflow-y: auto; min-height: 0; font-size: 0.85em; }
+  #hud-left .hud-block { padding: 6px 8px; min-width: 0; flex: 0 0 auto; }
+  #hud-left .hud-block h3 { font-size: 0.85em; margin: 0 0 2px; }
+  #hud-left #objective-text, #hud-left p { overflow-wrap: anywhere; }
+  .need-row label { font-size: 0.8em; }
   #hud-right { display: none; }
   #playfield { grid-area: field; }
+  #playfield .lesson-banner { top: 6px; left: 6px; transform: none; max-width: min(46%, 300px); padding: 6px 10px; font-size: 0.85em; }
   #action-tray { grid-area: tray; flex-direction: row; overflow-x: auto; padding-bottom: calc(6px + var(--safe-bottom)); }
 }
 

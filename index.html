@@ -108,6 +108,9 @@
       </div>
 
       <div id="playfield">
+        <!-- mobile: persistent pause/menu (the right rail is hidden there) -->
+        <button id="btn-pause-mobile" class="btn pause-mobile" aria-label="Pause and menu">⏸</button>
+        <div id="lesson-banner" class="lesson-banner hidden"></div>
         <div id="craving-bubble" class="craving-bubble hidden" role="status"></div>
         <div id="float-text-layer" aria-hidden="true"></div>
         <div id="compat-message" class="hidden">
@@ -136,7 +139,6 @@
       </div>
 
       <div id="action-tray" role="toolbar" aria-label="Care actions"></div>
-      <div id="lesson-banner" class="lesson-banner hidden"></div>
     </section>
 
     <!-- ============ RESULTS ============ -->

@@ -47,6 +47,7 @@ export class UI {
       b.addEventListener('click', () => this.h.startMode(b.dataset.mode)));
     this.el('btn-start-session').addEventListener('click', () => this.h.beginSession());
     this.el('btn-pause').addEventListener('click', () => this.h.pause());
+    this.el('btn-pause-mobile').addEventListener('click', () => this.h.pause());
     this.el('btn-resume').addEventListener('click', () => this.h.resume());
     this.el('btn-leave').addEventListener('click', () => this.h.leave());
     this.el('btn-hint').addEventListener('click', () => this.h.hint());
