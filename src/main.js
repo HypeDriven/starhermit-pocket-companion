@@ -8,7 +8,7 @@
 import * as rules from './rules.js';
 import * as content from './content.js';
 import { Session } from './session.js';
-import { Store, ACHIEVEMENTS, DEFAULT_SETTINGS } from './storage.js';
+import { Store, ACHIEVEMENTS, DEFAULT_SETTINGS, migrateProfile } from './storage.js';
 import { Platform } from './platform.js';
 import { AudioEngine } from './audio.js';
 import { Renderer3D, webglAvailable } from './render.js';
@@ -23,6 +23,7 @@ class Game {
   constructor() {
     this.store = new Store();
     this.platform = new Platform();
+    this.store.onSaved = () => this.platform.scheduleCloudSave();
     this.audio = new AudioEngine(() => this.store.profile.settings);
     this.ui = new UI(this._uiHandlers());
     this.renderer = null;
@@ -41,9 +42,25 @@ class Game {
 
   /* ================= boot ================= */
   async boot() {
+    // Host integration first: launch token, cloud doc (remote wins on
+    // conflict, local snapshot preserved), then platform identity. Each
+    // step degrades gracefully to local guest play.
+    this.platform.init();
+    this.platform.docProvider = () => ({ profile: this.store.profile, boards: this.store.allBoards() });
+    if (this.platform.hosted) {
+      this.platform.attachFlush();
+      this.platform.onSyncChange = () => this._renderAccountLine();
+      try {
+        const remote = await this.platform.cloudLoad();
+        if (remote) this._applyRemoteDoc(remote);
+      } catch (e) {
+        console.warn('[cloud] load failed, keeping local progress', e);
+      }
+    }
+
     const s = this.store.profile.settings;
     this.ui.applyAccessibilityClasses(s);
-    this.ui.renderSettings({ ...s, _name: this.store.profile.name }, (patch) => this._settingsChanged(patch));
+    this.ui.renderSettings({ ...s, _name: this.store.profile.name, _hosted: this.platform.hosted }, (patch) => this._settingsChanged(patch));
     this.audio.armUnlockOnGesture();
     this.audio.onCaption = (t) => this.ui.caption(t);
 
@@ -61,14 +78,14 @@ class Game {
     }
     if (!this.renderer) console.info('[boot] WebGL unavailable — DOM-only mode');
 
-    // Host integration: time sync, identity, presence.
+    // Host integration: own-server clock (local dev) + account identity.
     await this.platform.syncTime();
     const id = await this.platform.loadIdentity();
     if (!id.guest) {
       this.store.profile.name = id.name;
       this.store.saveProfile();
     }
-    document.getElementById('profile-chip').textContent = this.store.profile.name;
+    this._renderAccountLine();
 
     this._refreshTitle();
     this.ui.showScreen('title');
@@ -105,6 +122,38 @@ class Game {
       p.daily[today] ? `Done today — ${p.daily[today].score} pts` : `Not yet played · ${today}`;
     const done = Object.keys(p.journey).length;
     document.getElementById('journey-status').textContent = `${done} / ${content.JOURNEY_STAGES.length} stages`;
+  }
+
+  /** Apply the remote cloud doc; it wins on conflict (local doc is backed up). */
+  _applyRemoteDoc(remote) {
+    try {
+      this.platform.suspendSave(() => {
+        this.store.backupProfile();
+        if (remote && typeof remote === 'object') {
+          if (remote.profile) this.store.profile = migrateProfile(remote.profile);
+          if (remote.boards && typeof remote.boards === 'object') this.store.replaceBoards(remote.boards);
+        }
+        this.store.saveProfile();
+      });
+      this.ui.toast('Progress synced from your account');
+    } catch (e) {
+      console.warn('[cloud] apply failed', e);
+    }
+  }
+
+  /** Profile chip + small cloud sync status (hosted only). */
+  _renderAccountLine() {
+    const chip = document.getElementById('profile-chip');
+    if (chip) chip.textContent = this.store.profile.name;
+    const el = document.getElementById('sync-status');
+    if (!el) return;
+    if (!this.platform.hosted) { el.classList.add('hidden'); return; }
+    const note = {
+      loading: 'syncing…', saving: 'saving…',
+      synced: 'cloud synced', error: 'sync failed — kept on this device',
+    }[this.platform.syncState];
+    el.textContent = note || '';
+    el.classList.toggle('hidden', !note);
   }
 
   _offerResume(snap) {
@@ -604,14 +653,17 @@ class Game {
     const newAchievements = this.store.evaluateAchievements(this.session)
       .map((id) => ACHIEVEMENTS.find((a) => a.id === id)?.name).filter(Boolean);
 
-    // Score submission: ranked boards are replay-validated by the host.
+    // Score submission: ranked boards are replay-validated by the game's own
+    // declared backend (authenticated with the account id when hosted).
     const best = p.bestScores[cfg.id];
     const boardId = this.mode === 'daily' ? `daily:${cfg.dailyKey}` : this.mode === 'chase' ? `chase:${cfg.seed}` : `stage:${cfg.id}`;
     let comparison = score.total >= best ? 'New personal best!' : `Personal best: ${best}`;
     if (this.session.ranked) {
       const replay = this.session.exportReplay();
       this.platform.submitScore(boardId, {
-        name: p.name, score: score.total, ticks: st.tick,
+        name: p.name,
+        ...(this.platform.userId ? { playerId: this.platform.userId } : {}),
+        score: score.total, ticks: st.tick,
         invalidAttempts: st.invalidAttempts, assists: replay.assists,
         contentVersion: replay.contentVersion, seed: replay.seed,
         ruleset: cfg.stageId, duration: st.tick, replay,
@@ -620,6 +672,11 @@ class Game {
         else if (r?.casual) {
           this.store.submitLocalScore(boardId, { name: p.name, score: score.total, ticks: st.tick, me: true });
           this.ui.toast('Offline — score saved to the casual board');
+        } else if (this.platform.hosted) {
+          // No reachable validated backend (the own server is a local-dev
+          // route): keep the score on the casual board.
+          this.store.submitLocalScore(boardId, { name: p.name, score: score.total, ticks: st.tick, me: true });
+          this.ui.toast('Ranked board unavailable — score saved to the casual board');
         } else this.ui.toast('Score rejected: ' + (r?.error || 'unknown'));
       });
     } else {
@@ -661,17 +718,31 @@ class Game {
     }
     this._boardContext.friends = friends;
     const { boardId } = this._boardContext;
-    const r = await this.platform.fetchBoard(boardId, { friends });
-    let entries, subtitle;
-    if (r.ok) {
-      entries = r.data.entries || [];
-      subtitle = r.data.validated ? 'Validated by replay' : 'Casual board';
+    let entries, subtitle, title;
+    if (this.platform.hosted) {
+      // Global boards are platform-owned: read-only, nicknames resolved.
+      title = 'Leaderboard — global';
+      try {
+        entries = await this.platform.loadLeaderboard({ friends, pageSize: 20 });
+      } catch { entries = null; /* fall through to the casual board */ }
+      subtitle = entries ? 'Platform board · read-only' : 'Casual local board';
+      if (!entries) entries = this.store.getLocalBoard(boardId);
     } else {
-      entries = this.store.getLocalBoard(boardId);
-      subtitle = 'Casual local board (offline)';
+      title = 'Leaderboard — ' + boardId.split(':')[0];
+      const r = await this.platform.fetchBoard(boardId, { friends });
+      if (r.ok) {
+        entries = (r.data.entries || []).map((e) => ({
+          ...e,
+          me: e.me || !!(this.platform.userId && e.player === this.platform.userId),
+        }));
+        subtitle = r.data.validated ? 'Validated by replay' : 'Casual board';
+      } else {
+        entries = this.store.getLocalBoard(boardId);
+        subtitle = 'Casual local board (offline)';
+      }
     }
     this.ui.renderBoard({
-      title: 'Leaderboard — ' + boardId.split(':')[0],
+      title,
       subtitle: subtitle + (friends ? ' · friends only' : ''),
       entries, friends,
     });
@@ -693,6 +764,7 @@ class Game {
   _settingsChanged(patch) {
     const s = this.store.profile.settings;
     if ('_name' in patch) {
+      if (this.platform.hosted) return; // the platform account name wins
       this.store.profile.name = patch._name || 'Guest';
       document.getElementById('profile-chip').textContent = this.store.profile.name;
     } else {

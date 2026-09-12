@@ -23,14 +23,16 @@
  * read-modify wrapper is installed.
  *
  * Serving: the repo ships `server.js` (the StarHermit authoritative script
- * declared by starhermit.txt), but the game is fully playable offline — the
- * platform adapter's `syncTime` only sets `apiAvailable=true` when `/api/v1/time`
- * returns a `now`, so with `{}` answers the client degrades to its documented
- * offline path (local casual boards) with zero console noise. Per the sibling
- * convention (picture-logic/blockstead/balance-spire) this test embeds a
- * minimal node:http static server on an ephemeral port and answers /api/*
- * probes with 200 `{}`. If the UI ever strictly requires the backend this
- * can be swapped for spawning `server.js`; today it is not needed.
+ * declared by starhermit.txt), but the game is fully playable offline.
+ * Hosted mode activates only when a launch token is present (fragment
+ * `#game_token=`, never in this test); the adapter's `syncTime` treats a
+ * valid `/api/v1/time` answer as the game's own dev server and otherwise
+ * the client degrades to its documented offline path (local casual boards)
+ * with zero console noise. Per the sibling convention
+ * (picture-logic/blockstead/balance-spire) this test embeds a minimal
+ * node:http static server on an ephemeral port and answers /api/* probes
+ * with 200 `{}`. If the UI ever strictly requires the backend this can be
+ * swapped for spawning `server.js`; today it is not needed.
  *
  * Run: npm run test:e2e  (or: node tests/e2e.mjs)
  */

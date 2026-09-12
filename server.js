@@ -160,8 +160,9 @@ async function handleApi(req, res, url) {
       if (!plausible(replay, verified)) return json(res, 400, { error: 'implausible-score' });
 
       const name = String(body.name || 'Guest').slice(0, 24).replace(/[<>&"]/g, '');
+      const player = typeof body.playerId === 'string' && body.playerId ? body.playerId.slice(0, 64) : null;
       const entry = {
-        name, score: verified.score.total, ticks: verified.ticks,
+        name, player, score: verified.score.total, ticks: verified.ticks,
         invalidAttempts: verified.invalidAttempts,
         assists: verified.assists,
         ruleset: cfg.stageId, contentVersion: CONTENT_VERSION, seed: cfg.seed,

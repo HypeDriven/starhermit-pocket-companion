@@ -73,6 +73,7 @@ export class Store {
   constructor() {
     this.available = typeof localStorage !== 'undefined' && storageAvailable();
     this._mem = new Map(); // fallback when storage is blocked
+    this.onSaved = null;   // cloud-mirror hook (wired by the platform adapter)
     this.profile = this.loadProfile();
   }
 
@@ -105,6 +106,13 @@ export class Store {
     const data = this.profile;
     data.v = SAVE_VERSION;
     this._set(KEY_PROFILE, JSON.stringify({ data, checksum: checksum(data) }));
+    this.onSaved?.();
+  }
+
+  /** Preserve the current local doc before a remote cloud doc replaces it. */
+  backupProfile() {
+    const raw = this._get(KEY_PROFILE);
+    if (raw) this._set(KEY_PROFILE + ':pre-cloud', raw);
   }
 
   /** Last safe local snapshot (crash recovery). */
@@ -130,6 +138,11 @@ export class Store {
     try { return (JSON.parse(this._get(KEY_LOCAL_BOARDS) || '{}'))[boardId] || []; }
     catch { return []; }
   }
+  allBoards() {
+    try { return JSON.parse(this._get(KEY_LOCAL_BOARDS) || '{}'); }
+    catch { return {}; }
+  }
+  replaceBoards(boards) { this._set(KEY_LOCAL_BOARDS, JSON.stringify(boards || {})); }
 
   /** Idempotent achievement unlock; returns true on first unlock. */
   unlockAchievement(id) {

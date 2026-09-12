@@ -30,8 +30,8 @@ No build step, no dependencies (Three.js r160 is vendored in `vendor/`).
 | `src/rules.js` | Pure deterministic rules engine (integer permille math, seeded mulberry32 streams, legal-action API, scoring, serialization/migration, state hashing) |
 | `src/content.js` | Versioned content: themes, decor, 48 stages, lessons, challenges, daily generator, offline validator |
 | `src/session.js` | Command routing, undo, replay envelopes, snapshot restore, replay verification |
-| `src/storage.js` | Versioned, checksummed local saves; achievements; casual boards |
-| `src/platform.js` | Host adapter: launch token, time sync, presence, telemetry consent, API fallback |
+| `src/storage.js` | Versioned, checksummed local saves; achievements; casual boards; cloud-mirror + pre-cloud backup hooks |
+| `src/platform.js` | Host adapter: launch-token handshake + 45-min self-refresh, Bearer auth, account profile, single-slot cloud saves, read-only platform leaderboards; own-server time/presence/activity/telemetry in local dev only |
 | `src/render.js` | Three.js scene (procedural room + creature, pooled particles, quality tiers) |
 | `src/audio.js` | WebAudio synth: buses, seeded variants, captions hooks |
 | `src/ui.js` / `index.html` / `css/style.css` | Semantic DOM shell: responsive breakpoints, focus management, keyboard/gamepad, accessibility |

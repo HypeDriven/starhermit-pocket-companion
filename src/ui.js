@@ -450,9 +450,10 @@ export class UI {
     toggle('telemetryConsent', 'Anonymous usage stats', 'Only funnel events; never text or personal data.');
     const nameInput = document.createElement('input');
     nameInput.type = 'text'; nameInput.maxLength = 24; nameInput.value = settings._name || '';
+    if (settings._hosted) nameInput.disabled = true;
     nameInput.setAttribute('aria-label', 'Display name');
     nameInput.addEventListener('change', () => onChange({ _name: nameInput.value.slice(0, 24) }));
-    row('Display name', nameInput);
+    row('Display name', nameInput, settings._hosted ? 'Signed in — the platform account name is shown.' : '');
   }
 
   /* ---------------- settings applied to DOM ---------------- */

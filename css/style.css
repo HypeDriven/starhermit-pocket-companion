@@ -68,6 +68,7 @@ kbd {
 #game-title { font-size: 1.05em; margin: 0; letter-spacing: 0.04em; }
 #topbar-right { display: flex; gap: 8px; align-items: center; }
 #profile-chip { font-size: 0.85em; color: var(--text-dim); }
+.sync-status { font-size: 0.72em; color: var(--text-dim); opacity: 0.75; }
 .icon-btn {
   min-width: 44px; min-height: 44px; border-radius: 50%;
   background: var(--panel); color: var(--text); border: 1px solid var(--panel-border);
