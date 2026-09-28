@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#2b2333">
 <title>Pocket Companion</title>
 <link rel="stylesheet" href="css/style.css">
-<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
 </head>
 <body>
 <div id="app">
@@ -194,7 +194,12 @@
   <div id="overlay-settings" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-heading">
     <div class="sheet sheet-wide">
       <h2 id="settings-heading">Settings</h2>
-      <div id="settings-body" class="settings-grid"></div>
+      <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+        <button id="settings-tab-general" class="btn" role="tab" aria-selected="true" aria-controls="settings-body">General</button>
+        <button id="settings-tab-graphics" class="btn" role="tab" aria-selected="false" aria-controls="gfx-section" tabindex="-1">Graphics</button>
+      </div>
+      <div id="settings-body" class="settings-grid" role="tabpanel" aria-labelledby="settings-tab-general"></div>
+      <div id="gfx-section" class="settings-grid hidden" role="tabpanel" aria-labelledby="settings-tab-graphics"></div>
       <div class="sheet-actions">
         <button id="btn-settings-close" class="btn btn-primary">Done</button>
       </div>

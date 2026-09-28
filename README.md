@@ -32,7 +32,9 @@ No build step, no dependencies (Three.js r160 is vendored in `vendor/`).
 | `src/session.js` | Command routing, undo, replay envelopes, snapshot restore, replay verification |
 | `src/storage.js` | Versioned, checksummed local saves; achievements; casual boards; cloud-mirror + pre-cloud backup hooks |
 | `src/platform.js` | Host adapter: launch-token handshake + 45-min self-refresh, Bearer auth, account profile, single-slot cloud saves, read-only platform leaderboards; own-server time/presence/activity/telemetry in local dev only |
-| `src/render.js` | Three.js scene (procedural room + creature, pooled particles, quality tiers) |
+| `src/render.js` | Three.js scene (procedural room + creature, pooled particles), graphics settings, post-processing, adaptive resolution |
+| `src/gfx.js` / `src/gfx-i18n.js` | Pure graphics quality model (presets, overrides, GPU detection, cost summary) and Graphics panel strings |
+| `vendor/addons/` | three.js r160 post-processing passes, shaders and RoomEnvironment (same revision as `vendor/three.module.js`) |
 | `src/audio.js` | WebAudio synth: buses, seeded variants, captions hooks |
 | `src/ui.js` / `index.html` / `css/style.css` | Semantic DOM shell: responsive breakpoints, focus management, keyboard/gamepad, accessibility |
 | `server.js` | Zero-dependency Node authoritative script: static hosting, time, daily info, replay-validated leaderboards |
@@ -42,6 +44,7 @@ No build step, no dependencies (Three.js r160 is vendored in `vendor/`).
 
 ```bash
 node tests/run.mjs              # unit + property + fuzz + golden + content validation (127 checks)
+node --test tests/gfx.test.mjs  # graphics quality model + panel strings
 node tests/validate-content.mjs # content gate only (legality, reachability, bounded, no soft locks)
 node tests/tune.mjs             # balance probe: greedy-solve report for every stage
 ```

@@ -7,6 +7,8 @@
  */
 import { ACTIONS, NEEDS, INVALID_REASONS, BOND_LEVELS } from './rules.js';
 import { DECOR_ITEMS } from './content.js';
+import { PRESETS, CATEGORIES, presetTier, resolve, choosePreset } from './gfx.js';
+import { gfxStrings, describeWords } from './gfx-i18n.js';
 
 const NEED_LABELS = { hunger: 'Hunger', hygiene: 'Cleanliness', fun: 'Fun', energy: 'Energy' };
 const NEED_CRAVING_TEXT = {
@@ -30,6 +32,7 @@ export class UI {
     this._captionTimer = null;
     this._gamepadIndex = -1;
     this._gamepadPrev = {};
+    this.gt = gfxStrings(navigator.language);
     this._bindStatic();
     this._bindKeyboard();
     this._pollGamepad();
@@ -61,6 +64,22 @@ export class UI {
     this.el('btn-pause-settings').addEventListener('click', () => this.openOverlay('settings'));
     this.el('btn-pause-help').addEventListener('click', () => this.openOverlay('help'));
     this.el('btn-settings-close').addEventListener('click', () => this.closeOverlay('settings'));
+    this.el('settings-tab-general').textContent = this.gt('tabGeneral');
+    this.el('settings-tab-graphics').textContent = this.gt('tabGraphics');
+    const tabs = ['general', 'graphics'];
+    tabs.forEach((name, i) => {
+      const tab = this.el('settings-tab-' + name);
+      tab.addEventListener('click', () => this.selectSettingsTab(name));
+      tab.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+        this.selectSettingsTab(next);
+        this.el('settings-tab-' + next).focus();
+        e.preventDefault();
+      });
+    });
+    // Keep the graphics summary (resolution, frame rate) fresh while it is visible.
+    setInterval(() => { if (this.el('gfx-section').offsetParent) this._refreshGraphicsInfo(); }, 1000);
     this.el('btn-help-close').addEventListener('click', () => this.closeOverlay('help'));
     this.el('btn-decor-close').addEventListener('click', () => this.closeOverlay('decor'));
     this.el('tab-global').addEventListener('click', () => this.h.boardTab(false));
@@ -439,7 +458,6 @@ export class UI {
     slider('ambience', 'Ambience volume');
     slider('voice', 'Voice volume');
     toggle('captions', 'Captions', 'Text cues for meaningful audio.');
-    select('graphicsTier', 'Graphics tier', [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']], 'Lower tiers help older devices.');
     toggle('reducedMotion', 'Reduced motion', 'Removes camera sway, shake, and dense particles.');
     toggle('highContrast', 'High contrast');
     select('palette', 'Color palette', [['default', 'Default'], ['deuteranopia', 'Deuteranopia-safe'], ['protanopia', 'Protanopia-safe'], ['tritanopia', 'Tritanopia-safe']]);
@@ -455,6 +473,146 @@ export class UI {
     nameInput.setAttribute('aria-label', 'Display name');
     nameInput.addEventListener('change', () => onChange({ _name: nameInput.value.slice(0, 24) }));
     row('Display name', nameInput, settings._hosted ? 'Signed in — the platform account name is shown.' : '');
+  }
+
+  /* ---------------- settings tabs + graphics ---------------- */
+  selectSettingsTab(name) {
+    for (const n of ['general', 'graphics']) {
+      const on = n === name;
+      const tab = this.el('settings-tab-' + n);
+      tab.setAttribute('aria-selected', String(on));
+      tab.tabIndex = on ? 0 : -1;
+      this.el(n === 'general' ? 'settings-body' : 'gfx-section').classList.toggle('hidden', !on);
+    }
+    if (name === 'graphics') this._refreshGraphicsInfo();
+  }
+
+  /**
+   * Graphics section: preset, render scale, per-category overrides, adaptive
+   * resolution, frame-rate readout and a GPU/cost summary.
+   * `gfx` is the saved object; `infoFn()` returns renderer info or null;
+   * `onChange(newGfx)` persists and applies it.
+   */
+  renderGraphics(gfx, infoFn, onChange) {
+    this._gfx = { ...(gfx || {}) };
+    this._gfxInfo = infoFn;
+    this._gfxChange = onChange;
+    const t = this.gt;
+    const body = this.el('gfx-section');
+    const info = infoFn() || null;
+    const detected = info?.detected || 'low';
+    const r = resolve(this._gfx, detected);
+    body.innerHTML = '';
+    const row = (id, label, control, hint = '') => {
+      const div = document.createElement('div');
+      div.className = 'setting-row' + (control.type === 'checkbox' ? '' : ' stack-narrow');
+      const lab = document.createElement('label');
+      lab.htmlFor = id; lab.textContent = label;
+      div.append(lab, control);
+      if (hint) { const h = document.createElement('p'); h.className = 'hint'; h.textContent = hint; div.appendChild(h); }
+      body.appendChild(div);
+    };
+    const commit = (next) => { this._gfx = next; onChange({ ...next }); this.renderGraphics(next, infoFn, onChange); };
+    const mkSelect = (id, options, value) => {
+      const sel = document.createElement('select');
+      sel.id = id;
+      for (const [v, text] of options) {
+        const o = document.createElement('option');
+        o.value = v; o.textContent = text;
+        if (v === value) o.selected = true;
+        sel.appendChild(o);
+      }
+      return sel;
+    };
+    const presetName = (p) => t('preset_' + p);
+    const tierName = (x) => t('tier_' + x);
+
+    // Quality preset (choosing one clears the per-category overrides).
+    const presetSel = mkSelect('gfx-preset', [
+      ['auto', t('auto', { tier: presetName(detected) })],
+      ...PRESETS.map((p) => [p, presetName(p)]),
+    ], PRESETS.includes(this._gfx.preset) ? this._gfx.preset : 'auto');
+    presetSel.dataset.gfx = 'preset';
+    presetSel.addEventListener('change', () => {
+      commit(choosePreset(this._gfx, presetSel.value));
+      this.el('gfx-preset')?.focus();
+    });
+    row('gfx-preset', t('quality'), presetSel, t('presetHint'));
+
+    // Render scale 50–200 %.
+    const scaleWrap = document.createElement('div');
+    scaleWrap.className = 'range-with-value';
+    const scale = document.createElement('input');
+    scale.type = 'range'; scale.id = 'gfx-scale'; scale.min = 50; scale.max = 200; scale.step = 10;
+    scale.value = Math.round((Number(this._gfx.render_scale) || 1) * 100);
+    scale.dataset.gfx = 'render_scale';
+    const out = document.createElement('output');
+    out.htmlFor = 'gfx-scale'; out.id = 'gfx-scale-value'; out.textContent = scale.value + '%';
+    scale.addEventListener('input', () => { out.textContent = scale.value + '%'; });
+    scale.addEventListener('change', () => {
+      this._gfx = { ...this._gfx, render_scale: Number(scale.value) / 100 };
+      onChange({ ...this._gfx });
+      this._refreshGraphicsInfo();
+    });
+    scaleWrap.append(scale, out);
+    row('gfx-scale', t('renderScale'), scaleWrap);
+
+    // One override per category, "From preset (…)" by default.
+    for (const [cat, tiers] of Object.entries(CATEGORIES)) {
+      const cur = tiers.includes(this._gfx[cat]) ? this._gfx[cat] : 'preset';
+      const sel = mkSelect('gfx-' + cat, [
+        ['preset', t('fromPreset', { tier: tierName(presetTier(r.preset, cat)) })],
+        ...tiers.map((x) => [x, tierName(x)]),
+      ], cur);
+      sel.dataset.gfxCat = cat;
+      sel.addEventListener('change', () => {
+        const next = { ...this._gfx };
+        if (sel.value === 'preset') delete next[cat]; else next[cat] = sel.value;
+        commit(next);
+        this.el('gfx-' + cat)?.focus();
+      });
+      row('gfx-' + cat, t('cat_' + cat), sel);
+    }
+
+    const check = (id, key, label, hint, def) => {
+      const input = document.createElement('input');
+      input.type = 'checkbox'; input.id = id;
+      input.checked = this._gfx[key] == null ? def : !!this._gfx[key];
+      input.dataset.gfx = key;
+      input.addEventListener('change', () => {
+        this._gfx = { ...this._gfx, [key]: input.checked };
+        onChange({ ...this._gfx });
+        this._refreshGraphicsInfo();
+      });
+      row(id, label, input, hint);
+    };
+    check('gfx-adaptive', 'adaptive', t('adaptive'), t('adaptiveHint'), true);
+    check('gfx-fps', 'show_fps', t('showFps'), '', false);
+
+    const summary = document.createElement('p');
+    summary.id = 'gfx-summary'; summary.className = 'gfx-summary';
+    summary.setAttribute('aria-live', 'polite');
+    const note = document.createElement('p');
+    note.id = 'gfx-note'; note.className = 'gfx-note hidden'; note.setAttribute('role', 'note');
+    body.append(summary, note);
+    this._refreshGraphicsInfo();
+  }
+
+  _refreshGraphicsInfo() {
+    const summary = this.el('gfx-summary'), note = this.el('gfx-note');
+    if (!summary || !this._gfxInfo) return;
+    const info = this._gfxInfo(describeWords(this.gt));
+    if (!info) {
+      summary.textContent = '';
+      note.textContent = this.gt('noWebgl');
+      note.classList.remove('hidden');
+      return;
+    }
+    const fps = info.resolved?.showFps && info.fps ? ` · ${info.fps} fps` : '';
+    summary.textContent = `${info.gpu || this.gt('unknownGpu')} · ${info.summary}${fps}`;
+    summary.dataset.gfxPreset = info.resolved.preset;
+    note.textContent = info.postFailed ? this.gt('postUnavailable') : '';
+    note.classList.toggle('hidden', !info.postFailed);
   }
 
   /* ---------------- settings applied to DOM ---------------- */

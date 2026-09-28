@@ -4,6 +4,7 @@
  * Never stores credentials or tokens.
  */
 import { fnv1a } from './rules.js';
+import { fromLegacyTier } from './gfx.js';
 
 export const SAVE_VERSION = 2;
 const KEY_PROFILE = 'pocket-companion:profile';
@@ -12,7 +13,7 @@ const KEY_LOCAL_BOARDS = 'pocket-companion:boards';
 
 export const DEFAULT_SETTINGS = {
   music: 0.6, effects: 0.8, ambience: 0.5, voice: 0.7,
-  graphicsTier: 'auto',       // auto | low | medium | high
+  gfx: { preset: 'auto' },    // graphics quality model (see gfx.js): preset, render_scale, adaptive, show_fps, per-category overrides
   reducedMotion: false,
   highContrast: false,
   palette: 'default',         // default | deuteranopia | protanopia | tritanopia
@@ -182,6 +183,10 @@ export class Store {
 export function migrateProfile(p) {
   const out = { ...structuredClone(DEFAULT_PROFILE), ...p };
   out.settings = { ...DEFAULT_SETTINGS, ...(p.settings || {}) };
+  // The single graphics tier became the preset + override model.
+  if (!p.settings?.gfx) out.settings.gfx = p.settings?.graphicsTier ? fromLegacyTier(p.settings.graphicsTier) : { preset: 'auto' };
+  else out.settings.gfx = { ...p.settings.gfx };
+  delete out.settings.graphicsTier;
   if (!Array.isArray(out.dailyDays)) out.dailyDays = [];
   if (out.dailyDays.length === 0 && out.daily && Object.keys(out.daily).length) {
     out.dailyDays = Object.keys(out.daily);

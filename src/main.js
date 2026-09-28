@@ -12,6 +12,7 @@ import { Store, ACHIEVEMENTS, DEFAULT_SETTINGS, migrateProfile } from './storage
 import { Platform } from './platform.js';
 import { AudioEngine } from './audio.js';
 import { Renderer3D, webglAvailable } from './render.js';
+import { resolve as resolveGfx } from './gfx.js';
 import { UI } from './ui.js';
 
 const NEED_BEST_ACTION = {
@@ -68,15 +69,18 @@ class Game {
     const field = document.getElementById('playfield');
     if (webglAvailable()) {
       this.renderer = new Renderer3D(field, { decorSeed: 1 });
-      const tier = this._resolveTier();
-      if (!this.renderer.init(tier)) this.renderer = null;
+      if (!this.renderer.init(s.gfx)) this.renderer = null;
       else {
         this.renderer.setReducedMotion(s.reducedMotion);
         this.renderer.onCreatureTap = () => this._creatureTapped();
         this.renderer.start();
       }
     }
-    if (!this.renderer) console.info('[boot] WebGL unavailable — DOM-only mode');
+    if (!this.renderer) {
+      console.info('[boot] WebGL unavailable — DOM-only mode');
+      document.body.dataset.gfxPreset = resolveGfx(s.gfx, 'low').preset;
+    }
+    this.ui.renderGraphics(s.gfx, (words) => this.renderer?.graphicsInfo(words) ?? null, (gfx) => this._settingsChanged({ gfx }));
 
     // Host integration: own-server clock (local dev) + account identity.
     await this.platform.syncTime();
@@ -105,14 +109,6 @@ class Game {
     // Offer resume of the last safe snapshot.
     const snap = this.store.loadSessionSnapshot();
     if (snap && snap.snapshot && snap.contentId) this._offerResume(snap);
-  }
-
-  _resolveTier() {
-    const t = this.store.profile.settings.graphicsTier;
-    if (t !== 'auto') return t;
-    const cores = navigator.hardwareConcurrency || 4;
-    const mobile = /Mobi|Android/i.test(navigator.userAgent);
-    return mobile || cores <= 4 ? 'medium' : 'high';
   }
 
   _refreshTitle() {
@@ -775,7 +771,9 @@ class Game {
     this.audio.applySettings();
     if (this.renderer) {
       this.renderer.setReducedMotion(s.reducedMotion);
-      this.renderer.setQuality(this._resolveTier());
+      if ('gfx' in patch) this.renderer.setGraphics(s.gfx);
+    } else if ('gfx' in patch) {
+      document.body.dataset.gfxPreset = resolveGfx(s.gfx, 'low').preset;
     }
     this.platform.telemetry('settings-change', Object.keys(patch).join(','), s.telemetryConsent);
   }

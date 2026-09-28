@@ -178,6 +178,60 @@ async function playToCompletion(page) {
   throw new Error('did not reach results within guard limit');
 }
 
+// ---------- Graphics settings through the visible Settings panel ----------
+// Opens Settings → Graphics, switches Low then High, overrides one category,
+// checks the change is applied (body[data-gfx-preset] + the summary line),
+// reloads to confirm it persisted, then returns to Low (clearing overrides).
+async function graphicsFlow(page, name) {
+  const openGraphics = async () => {
+    await page.click('#btn-settings-top');
+    await page.waitForSelector('#overlay-settings:not(.hidden)', { timeout: 8000 });
+    await page.click('#settings-tab-graphics');
+    await page.waitForSelector('#gfx-section:not(.hidden)', { timeout: 4000 });
+  };
+  const preset = () => page.evaluate(() => document.body.dataset.gfxPreset);
+  const summary = () => page.textContent('#gfx-summary');
+  await openGraphics();
+  const auto = await preset();
+  if (!['low', 'balanced', 'high', 'ultra'].includes(auto)) throw new Error('no graphics preset applied at boot: ' + auto);
+  const autoLabel = await page.locator('#gfx-preset option[value="auto"]').textContent();
+  if (!/Auto \(detected: /.test(autoLabel)) throw new Error('auto option label: ' + autoLabel);
+  // The panel fits the viewport (it scrolls inside the sheet).
+  const sheet = await page.locator('#overlay-settings .sheet').boundingBox();
+  const vp = page.viewportSize();
+  if (sheet.y < 0 || sheet.x < 0 || sheet.y + sheet.height > vp.height + 1 || sheet.x + sheet.width > vp.width + 1) throw new Error('settings sheet overflows viewport: ' + JSON.stringify(sheet));
+
+  await page.selectOption('#gfx-preset', 'low');
+  await page.waitForFunction(() => document.body.dataset.gfxPreset === 'low');
+  if (!/no shadows/.test(await summary())) throw new Error('Low summary: ' + await summary());
+  await page.selectOption('#gfx-preset', 'high');
+  await page.waitForFunction(() => document.body.dataset.gfxPreset === 'high');
+  const hi = await summary();
+  if (!/1024² shadows/.test(hi) || !/bloom/.test(hi)) throw new Error('High summary: ' + hi);
+  const fromPreset = await page.locator('#gfx-bloom option[value="preset"]').textContent();
+  if (!/From preset \(On\)/.test(fromPreset)) throw new Error('bloom preset label: ' + fromPreset);
+  await page.locator('#gfx-bloom').scrollIntoViewIfNeeded();
+  await page.selectOption('#gfx-bloom', 'off');
+  await page.waitForFunction(() => !/bloom/.test(document.getElementById('gfx-summary').textContent));
+  ok(`${name}: Graphics — Low then High applied, bloom override off (${(await summary()).replace(/^.*? · (\d+² shadows)/, '$1')})`);
+
+  // Persisted across a reload.
+  await page.reload({ waitUntil: 'load' });
+  await screenActive(page, 'title');
+  if (await preset() !== 'high') throw new Error('preset not persisted: ' + await preset());
+  await openGraphics();
+  if (await page.inputValue('#gfx-bloom') !== 'off') throw new Error('bloom override not persisted');
+  if (/bloom/.test(await summary())) throw new Error('bloom override not applied after reload');
+  // Choosing a preset clears the overrides.
+  await page.selectOption('#gfx-preset', 'low');
+  await page.waitForFunction(() => document.body.dataset.gfxPreset === 'low');
+  if (await page.inputValue('#gfx-bloom') !== 'preset') throw new Error('preset did not clear overrides');
+  await page.screenshot({ path: SHOT('graphics', name) });
+  await page.click('#btn-settings-close');
+  await page.waitForSelector('#overlay-settings', { state: 'hidden', timeout: 8000 });
+  ok(`${name}: Graphics settings persisted across reload; choosing Low cleared overrides`);
+}
+
 // ---------- one full pass ----------
 async function runPass(browser, name, ctxOpts, { full }) {
   const errors = [];
@@ -185,7 +239,7 @@ async function runPass(browser, name, ctxOpts, { full }) {
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() !== 'error' || browserNoise.test(m.text())) return;
+    if ((m.type() !== 'error' && m.type() !== 'warning') || browserNoise.test(m.text())) return;
     const url = m.location()?.url || '';
     if (/Failed to load resource/.test(m.text()) && /\/api\/|\/favicon/.test(url)) return;
     errors.push(`console: ${m.text()}`);
@@ -201,6 +255,8 @@ async function runPass(browser, name, ctxOpts, { full }) {
     await screenActive(page, 'title');
     await page.screenshot({ path: SHOT('title', name) });
     ok(`${name}: title screen visible`);
+
+    await graphicsFlow(page, name);
 
     // Play → Practice (Steady) → Start
     await page.click('#btn-play');

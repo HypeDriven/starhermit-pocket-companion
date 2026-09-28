@@ -115,16 +115,35 @@ kbd {
 
 /* ---------- title ---------- */
 #screen-title { justify-content: center; }
-.title-hero { height: clamp(90px, 18vh, 180px); display: grid; place-items: center; }
+.title-hero {
+  height: clamp(90px, 18vh, 180px); display: grid; place-items: center; position: relative;
+  width: clamp(160px, 30vh, 280px);
+}
+/* Warm lamplight halo + floor shadow behind the hero Mote. */
+.title-hero::before {
+  content: ''; position: absolute; inset: -20% -10%;
+  background: radial-gradient(closest-side, rgba(255, 190, 110, 0.22), rgba(255, 190, 110, 0.06) 60%, transparent);
+  pointer-events: none;
+}
+.title-hero::after {
+  content: ''; position: absolute; bottom: 4%; left: 50%; width: clamp(60px, 11vh, 110px); height: 12px;
+  transform: translateX(-50%); border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.45), transparent);
+}
 .hero-mote {
   width: clamp(70px, 14vh, 130px); height: clamp(70px, 14vh, 130px);
   border-radius: 48% 52% 50% 50% / 55% 55% 45% 45%;
-  background: radial-gradient(circle at 35% 30%, #ffe3c2, #f2c9a0 60%, #d9a87e);
-  position: relative; animation: bob 3.2s ease-in-out infinite;
+  background:
+    radial-gradient(circle at 30% 60%, rgba(240, 144, 138, 0.55) 0 7%, transparent 9%),
+    radial-gradient(circle at 70% 60%, rgba(240, 144, 138, 0.55) 0 7%, transparent 9%),
+    radial-gradient(ellipse 30% 20% at 50% 80%, #fff3e0 0 92%, transparent 100%),
+    radial-gradient(circle at 35% 28%, #fff0dc, #f2c9a0 55%, #cf9c72);
+  box-shadow: inset -6px -8px 16px rgba(120, 70, 40, 0.25), inset 4px 5px 10px rgba(255, 255, 255, 0.35);
+  position: relative; z-index: 1; animation: bob 3.2s ease-in-out infinite;
 }
 .hero-mote::before, .hero-mote::after {
   content: ''; position: absolute; top: 38%; width: 12%; height: 14%;
-  border-radius: 50%; background: #2a2430;
+  border-radius: 50%; background: radial-gradient(circle at 32% 30%, #fff 0 18%, #2a2430 24%);
 }
 .hero-mote::before { left: 27%; } .hero-mote::after { right: 27%; }
 @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8%); } }
@@ -352,6 +371,28 @@ body[data-handed="left"] #action-tray { flex-direction: row-reverse; }
   background: var(--panel); color: var(--text); border: 1px solid var(--panel-border); padding: 4px 10px;
 }
 .setting-row input[type="checkbox"] { width: 26px; height: 26px; }
+.settings-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.settings-tabs .btn { flex: 1 1 0; }
+.settings-tabs [aria-selected="true"] { border-color: var(--accent); background: rgba(255, 182, 92, 0.14); }
+.range-with-value { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.range-with-value input[type="range"] { width: 130px; }
+.range-with-value output { min-width: 3.4em; text-align: right; font-variant-numeric: tabular-nums; }
+.gfx-summary { margin: 4px 0 0; font-size: 0.82em; color: var(--text-dim); overflow-wrap: anywhere; }
+.gfx-note { margin: 0; font-size: 0.82em; color: var(--accent); }
+@media (max-width: 520px) {
+  /* Phones: label above its control so option text is never clipped. */
+  .setting-row.stack-narrow { grid-template-columns: 1fr; gap: 4px; }
+  .setting-row.stack-narrow select { width: 100%; }
+  .setting-row.stack-narrow .hint { margin: 0; }
+  .range-with-value input[type="range"] { flex: 1; width: auto; }
+}
+/* Frame-rate readout: bottom-left of the playfield, never over controls. */
+.fps-meter {
+  position: absolute; left: 8px; bottom: 8px; z-index: 5; pointer-events: none;
+  background: rgba(0, 0, 0, 0.55); color: #fff; border-radius: 6px;
+  padding: 2px 8px; font: 12px/1.4 ui-monospace, monospace;
+}
+.fps-meter[hidden] { display: none; }
 
 /* ---------- decor ---------- */
 .decor-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
