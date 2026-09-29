@@ -408,7 +408,7 @@ export class UI {
     this.el('help-body').innerHTML =
       `<p>Care for Mote by reading its four needs — Hunger, Cleanliness, Fun, Energy — and choosing an action.
        Every action advances the clock and all needs slowly drain. Fulfil the objective before time runs out.
-       Thought bubbles are <em>cravings</em>: grant them for bonus Trust. Neglect never causes permanent loss.</p>
+       Thought bubbles are <em>cravings</em>: grant them for bonus Trust. Neglect never causes permanent loss. Tap Mote to pet it.</p>
        <p><strong>Keyboard:</strong> number keys act · <kbd>H</kbd> hint · <kbd>U</kbd> undo (practice) ·
        <kbd>C</kbd> camera · <kbd>Esc</kbd> pause · arrow keys move between buttons.</p>
        <p><strong>Gamepad:</strong> D-pad moves focus · <kbd>A</kbd> confirm · <kbd>B</kbd> cancel · <kbd>Start</kbd> pause.</p>

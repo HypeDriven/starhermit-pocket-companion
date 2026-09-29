@@ -31,7 +31,7 @@ The rules engine must represent legal actions independently from rendering. It m
 
 ### Core loop
 
-The repeated loop is: **read a need, perform care or play, observe a response, and customize the shared room**. Input is locked only during the shortest non-interruptible resolution phase. Cosmetic animation may continue after the logical state is ready, but skip/fast-forward must settle every object into the exact deterministic end state.
+The repeated loop is: **read a need, perform care or play, observe a response, and customize the shared room**. Pet is available in every stage and mode — as an action-tray button and by tapping Mote in the room — so the player can always interact with the companion directly; when a pet is not legal (overjoyed, resolving, finished) a tap still makes Mote react with hearts and a chirp, without advancing the clock. Input is locked only during the shortest non-interruptible resolution phase. Cosmetic animation may continue after the logical state is ready, but skip/fast-forward must settle every object into the exact deterministic end state.
 
 ### Scoring and victory
 
@@ -267,3 +267,7 @@ Success targets for the first public test: median first-play time under 20 secon
 This specification is ready for implementation when rules examples, content schema, wireframes for all responsive breakpoints, visual target frames, accessibility annotations, authoritative message schema, achievement definitions, leaderboard definitions, and performance test devices are approved.
 
 This document does **not** authorize implementation, asset production, monetization work, native wrappers, real-money systems, or copying any existing product. The initial build should favor one excellent core loop and a coherent original visual identity over feature breadth.
+
+## Browser interference
+
+`browser-guard.js` (loaded from `index.html`) suppresses browser UI that gets in the way of play: the right-click context menu, the iOS long-press callout, copy / cut / paste, and page text selection. Text fields (inputs, textareas, selects, contenteditable) keep normal selection, context menu and clipboard behaviour.

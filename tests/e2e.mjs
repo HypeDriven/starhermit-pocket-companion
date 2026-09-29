@@ -352,6 +352,29 @@ async function runPass(browser, name, ctxOpts, { full }) {
       const bd = boards && boards['stage:practice-steady'];
       if (!bd || bd.length < 1) throw new Error('local casual board entry not recorded');
       ok(`${name}: progress persisted (sessions: ${prof.sessionsPlayed}, casual board: ${bd.length} entry, achievements: ${Object.keys(prof.achievements || {}).length})`);
+
+      // Journey stage 1: Mote can be petted from the very first stage, by the
+      // tray button and by tapping Mote in the room.
+      await page.click('#btn-results-modes');
+      await screenActive(page, 'modes');
+      await page.locator('.mode-card[data-mode="journey"]').click();
+      await screenActive(page, 'journey');
+      await page.locator('#journey-grid .journey-card').first().click();
+      await screenActive(page, 'setup');
+      await page.click('#btn-start-session');
+      await screenActive(page, 'game');
+      await page.waitForSelector('#action-tray .action-btn', { timeout: 10000 });
+      const j0 = await readState(page);
+      if (!j0.legal.pet) throw new Error('journey stage 1 has no legal Pet: ' + JSON.stringify(j0.legal));
+      await doAction(page, 'pet');
+      const cv = await page.locator('#playfield canvas').first().boundingBox();
+      const before = (await readState(page)).tick;
+      await page.mouse.click(cv.x + cv.width / 2, cv.y + cv.height * 0.55);
+      await page.waitForFunction((prev) => {
+        const tm = (document.getElementById('tick-display').textContent || '').match(/Tick (\d+)/);
+        return tm && parseInt(tm[1], 10) > prev;
+      }, before, { timeout: 4000 });
+      ok(`${name}: journey stage 1 — Pet via the tray and by tapping Mote (tray: ${Object.keys(j0.legal).join(', ')})`);
     } else {
       // mobile: make a few real care actions via touchscreen.tap
       let tapped = 0;

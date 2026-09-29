@@ -469,7 +469,12 @@ class Game {
   _creatureTapped() {
     // Tapping Mote performs a contextual pet when legal.
     if (this.session && this.session.legal.some((a) => a.id === 'pet' && a.legal)) this._act('pet');
-    else if (this.session) this.ui.announce('Mote wiggles happily.');
+    else if (this.session) {
+      // Not a legal pet right now (overjoyed, resolving, finished): still answer the touch.
+      if (this.renderer) this.renderer.react('pet', 'ack');
+      this.audio.event('ack');
+      this.ui.announce('Mote wiggles happily.');
+    }
   }
 
   _openDecor() {

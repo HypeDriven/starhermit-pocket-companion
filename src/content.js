@@ -5,7 +5,7 @@
  */
 import { ACTIONS, NEEDS, fnv1a, createGame, applyCommand, legalActions, isTerminal, bondLevel } from './rules.js';
 
-export const CONTENT_VERSION = 1;
+export const CONTENT_VERSION = 2;
 export const BUILD_VERSION = '1.0.0';
 
 /* ------------------------------------------------------------------ *
@@ -73,6 +73,13 @@ const CARE4 = ['feed', 'wash', 'play', 'rest', 'wait'];
 const BOND = ['pet', 'sing', 'toss'];
 const DECOR_POOL = DECOR_ITEMS.map((d) => d.id);
 
+/** Pet (also performed by tapping Mote) is available in every stage, listed before Wait. */
+function withPet(actions) {
+  if (actions.includes('pet')) return actions;
+  const i = actions.indexOf('wait');
+  return i < 0 ? [...actions, 'pet'] : [...actions.slice(0, i), 'pet', ...actions.slice(i)];
+}
+
 function stage(id, chapter, index, opts) {
   return {
     contentVersion: CONTENT_VERSION,
@@ -82,7 +89,7 @@ function stage(id, chapter, index, opts) {
     tutorial: !!opts.tutorial,
     theme: opts.theme || THEMES[(chapter - 1) % THEMES.length].id,
     intro: opts.intro || '',
-    allowedActions: opts.allowedActions || CARE4,
+    allowedActions: withPet(opts.allowedActions || CARE4),
     allowedDecor: opts.allowedDecor || [],
     decay: opts.decay || { hunger: 4, hygiene: 3, fun: 4, energy: 2 },
     startNeeds: opts.startNeeds,
@@ -101,7 +108,7 @@ function buildJourney() {
   const S = [];
   // Chapter 1 — Feeding & washing (two needs, isolated).
   const c1 = [
-    ['First Supper', 'Mote is peckish. Feed it until the bowl is empty of worry.', { goals: { care: 60 }, tickLimit: 60, decay: { hunger: 6, hygiene: 1, fun: 1, energy: 1 }, allowedActions: ['feed', 'wait'], par: 12, tutorial: true, teaches: ['feed'] }],
+    ['First Supper', 'Mote is peckish. Feed it until the bowl is empty of worry — and tap Mote any time to pet it.', { goals: { care: 60 }, tickLimit: 60, decay: { hunger: 6, hygiene: 1, fun: 1, energy: 1 }, allowedActions: ['feed', 'wait'], par: 12, tutorial: true, teaches: ['feed'] }],
     ['Bubble Trouble', 'A dusty arrival. Time for a bath.', { goals: { care: 80 }, tickLimit: 85, decay: { hunger: 1, hygiene: 6, fun: 1, energy: 1 }, allowedActions: ['wash', 'wait'], par: 14, tutorial: true, teaches: ['wash'] }],
     ['Full and Fresh', 'Keep both Hunger and Cleanliness tended together.', { goals: { care: 160 }, tickLimit: 90, decay: { hunger: 5, hygiene: 5, fun: 1, energy: 1 }, allowedActions: ['feed', 'wash', 'wait'], par: 24 }],
     ['A First Friend', 'Care builds Trust. Reach Bond level 1.', { goals: { bondLevel: 1 }, tickLimit: 110, decay: { hunger: 5, hygiene: 4, fun: 2, energy: 2 }, allowedActions: ['feed', 'wash', 'pet', 'wait'], par: 40, teaches: ['pet'] }],
@@ -268,6 +275,7 @@ export function challengeConfig(challengeId) {
   if (!c) return null;
   const base = getStage(c.base);
   const merged = { ...base, ...c.modify, goals: { ...base.goals, ...(c.modify.goals || {}) } };
+  merged.allowedActions = withPet(merged.allowedActions);
   return {
     ...merged,
     id: c.id, stageId: c.id, name: c.name, intro: c.blurb,
