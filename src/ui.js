@@ -19,7 +19,28 @@ const ACTION_ICONS = {
   feed: '🍲', snack: '🥮', wash: '🫧', play: '🧶', rest: '💤',
   pet: '🤚', sing: '🎵', toss: '⚾', decorate: '🪑', wait: '⏳',
 };
-const DEFAULT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+// Keyboard bindings (KeyboardEvent.code), declared as control.* in
+// starhermit.txt: tray slots 1-10 act, plus hint / undo / camera / pause.
+// The player's StarHermit overrides replace these when signed in.
+export const DEFAULT_BINDINGS = {
+  ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => {
+    const d = (i + 1) % 10;
+    return [`slot${i + 1}`, [`Digit${d}`, `Numpad${d}`]];
+  })),
+  hint: ['KeyH'],
+  undo: ['KeyU'],
+  camera: ['KeyC'],
+  pause: ['Escape'],
+};
+function keyLabel(code) {
+  const named = { Escape: 'Esc', Space: 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
+  if (!code) return '';
+  if (named[code]) return named[code];
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad\d$/.test(code)) return `Num ${code.slice(6)}`;
+  return String(code).replace(/[^\w ]/g, '');
+}
 
 export class UI {
   constructor(handlers) {
@@ -27,7 +48,8 @@ export class UI {
     this.el = (id) => document.getElementById(id);
     this._focusMemory = new Map();
     this._actionButtons = new Map();
-    this._keymap = new Map();
+    this._keymap = new Map();   // KeyboardEvent.code -> tray action id
+    this.bindings = structuredClone(DEFAULT_BINDINGS);
     this._lastFocus = null;
     this._captionTimer = null;
     this._gamepadIndex = -1;
@@ -164,7 +186,14 @@ export class UI {
   }
 
   /* ---------------- action tray ---------------- */
-  buildActionTray(actions, keybinds) {
+  setBindings(b) { this.bindings = b; }
+  _actionFor(code) {
+    for (const [action, codes] of Object.entries(this.bindings)) if (codes.includes(code)) return action;
+    return null;
+  }
+  _keys(action) { return (this.bindings[action] || []).map(keyLabel); }
+
+  buildActionTray(actions) {
     const tray = this.el('action-tray');
     tray.innerHTML = '';
     this._actionButtons.clear();
@@ -175,7 +204,8 @@ export class UI {
       btn.className = 'action-btn';
       btn.dataset.action = a.id;
       btn.dataset.legal = String(a.legal);
-      const key = keybinds?.[a.id] || DEFAULT_KEYS[i] || '';
+      const codes = this.bindings[`slot${i + 1}`] || [];
+      const key = keyLabel(codes[0]);
       btn.innerHTML = `<span class="a-icon" aria-hidden="true">${ACTION_ICONS[a.id] || '•'}</span>` +
         `<span class="a-label">${def ? def.label : a.id}</span>` +
         (key ? `<span class="a-key">${key}</span>` : '');
@@ -190,7 +220,7 @@ export class UI {
       btn.addEventListener('blur', () => this.h.hoverAction(null));
       tray.appendChild(btn);
       this._actionButtons.set(a.id, btn);
-      if (key) this._keymap.set(key, a.id);
+      for (const c of codes) this._keymap.set(c, a.id);
     });
   }
 
@@ -397,11 +427,11 @@ export class UI {
   }
 
   /* ---------------- help (generated from current mappings) ---------------- */
-  renderHelp(actions, keybinds) {
-    const cards = actions.map((a) => {
+  renderHelp(actions) {
+    const cards = actions.map((a, i) => {
       const def = ACTIONS[a.id];
       if (!def) return '';
-      const key = keybinds?.[a.id] || '';
+      const key = this._keys(`slot${i + 1}`)[0] || '';
       return `<div class="card"><strong>${ACTION_ICONS[a.id] || ''} ${def.label}${key ? ` <kbd>${key}</kbd>` : ''}</strong>` +
         `<span>${def.blurb} Costs ${def.ticks} tick${def.ticks === 1 ? '' : 's'}.</span></div>`;
     }).join('');
@@ -409,8 +439,8 @@ export class UI {
       `<p>Care for Mote by reading its four needs — Hunger, Cleanliness, Fun, Energy — and choosing an action.
        Every action advances the clock and all needs slowly drain. Fulfil the objective before time runs out.
        Thought bubbles are <em>cravings</em>: grant them for bonus Trust. Neglect never causes permanent loss. Tap Mote to pet it.</p>
-       <p><strong>Keyboard:</strong> number keys act · <kbd>H</kbd> hint · <kbd>U</kbd> undo (practice) ·
-       <kbd>C</kbd> camera · <kbd>Esc</kbd> pause · arrow keys move between buttons.</p>
+       <p><strong>Keyboard:</strong> number keys act · <kbd>${this._keys('hint').join(' / ')}</kbd> hint · <kbd>${this._keys('undo').join(' / ')}</kbd> undo (practice) ·
+       <kbd>${this._keys('camera').join(' / ')}</kbd> camera · <kbd>${this._keys('pause').join(' / ')}</kbd> pause · arrow keys move between buttons.</p>
        <p><strong>Gamepad:</strong> D-pad moves focus · <kbd>A</kbd> confirm · <kbd>B</kbd> cancel · <kbd>Start</kbd> pause.</p>
        <div class="achievement-list">${cards}</div>`;
   }
@@ -466,7 +496,6 @@ export class UI {
     toggle('holdToRepeat', 'Hold-to-repeat actions', 'Hold a button to repeat instead of toggling.');
     toggle('timingAssist', 'Timing assist', 'Slower need drain. Sessions with assists are not ranked.');
     toggle('haptics', 'Haptics', 'Vibration on supported devices.');
-    toggle('telemetryConsent', 'Anonymous usage stats', 'Only funnel events; never text or personal data.');
     const nameInput = document.createElement('input');
     nameInput.type = 'text'; nameInput.maxLength = 24; nameInput.value = settings._name || '';
     if (settings._hosted) nameInput.disabled = true;
@@ -630,18 +659,19 @@ export class UI {
       if (e.defaultPrevented) return;
       const tag = document.activeElement?.tagName;
       const typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
-      if (e.key === 'Escape') {
+      const action = this._actionFor(e.code);
+      if (e.key === 'Escape' || action === 'pause') {
         if (this.isOverlayOpen()) { this.closeAllOverlays(); this.h.resume(true); }
         else this.h.pause();
         e.preventDefault();
         return;
       }
       if (typing) return;
-      if (this._keymap.has(e.key)) { this.h.keyAction(this._keymap.get(e.key)); e.preventDefault(); return; }
-      switch (e.key.toLowerCase()) {
-        case 'h': this.h.hint(); e.preventDefault(); break;
-        case 'u': this.h.undo(); e.preventDefault(); break;
-        case 'c': this.h.camera(); e.preventDefault(); break;
+      if (this._keymap.has(e.code)) { this.h.keyAction(this._keymap.get(e.code)); e.preventDefault(); return; }
+      switch (action) {
+        case 'hint': this.h.hint(); e.preventDefault(); break;
+        case 'undo': this.h.undo(); e.preventDefault(); break;
+        case 'camera': this.h.camera(); e.preventDefault(); break;
       }
     });
   }

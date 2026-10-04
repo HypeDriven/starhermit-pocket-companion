@@ -18,7 +18,7 @@ No build step, no dependencies (Three.js r160 is vendored in `vendor/`).
 
 - **Learn** — five interactive lessons; each requires performing the real action.
 - **Journey** — 48 authored stages in 6 chapters with mastery trials.
-- **Daily** — one shared immutable seed per UTC day; replay-validated ranked board.
+- **Daily** — one shared immutable seed per UTC day; shared seed; local board.
 - **Practice** — selectable difficulty, undo, never ranked.
 - **Challenge** — move limits, speed targets, restricted tools.
 - **Score Chase** — asynchronous board on a shared seed.
@@ -31,7 +31,7 @@ No build step, no dependencies (Three.js r160 is vendored in `vendor/`).
 | `src/content.js` | Versioned content: themes, decor, 48 stages, lessons, challenges, daily generator, offline validator |
 | `src/session.js` | Command routing, undo, replay envelopes, snapshot restore, replay verification |
 | `src/storage.js` | Versioned, checksummed local saves; achievements; casual boards; cloud-mirror + pre-cloud backup hooks |
-| `src/platform.js` | Host adapter: launch-token handshake + 45-min self-refresh, Bearer auth, account profile, single-slot cloud saves, read-only platform leaderboards; own-server time/presence/activity/telemetry in local dev only |
+| `src/platform.js` | Host adapter: launch-token handshake + 45-min self-refresh, Bearer auth, account profile, single-slot cloud saves, read-only platform leaderboards; no own-server calls |
 | `src/render.js` | Three.js scene (procedural room + creature, pooled particles), graphics settings, post-processing, adaptive resolution |
 | `src/gfx.js` / `src/gfx-i18n.js` | Pure graphics quality model (presets, overrides, GPU detection, cost summary) and Graphics panel strings |
 | `vendor/addons/` | three.js r160 post-processing passes, shaders and RoomEnvironment (same revision as `vendor/three.module.js`) |

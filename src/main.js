@@ -10,10 +10,11 @@ import * as content from './content.js';
 import { Session } from './session.js';
 import { Store, ACHIEVEMENTS, DEFAULT_SETTINGS, migrateProfile } from './storage.js';
 import { Platform } from './platform.js';
+import { currentPlatformStrings } from './platform-i18n.js';
 import { AudioEngine } from './audio.js';
 import { Renderer3D, webglAvailable } from './render.js';
 import { resolve as resolveGfx } from './gfx.js';
-import { UI } from './ui.js';
+import { UI, DEFAULT_BINDINGS } from './ui.js';
 
 const NEED_BEST_ACTION = {
   hunger: ['feed', 'snack'], hygiene: ['wash'],
@@ -48,6 +49,7 @@ class Game {
     // step degrades gracefully to local guest play.
     this.platform.init();
     this.platform.docProvider = () => ({ profile: this.store.profile, boards: this.store.allBoards() });
+    this._wirePlatform();
     if (this.platform.hosted) {
       this.platform.attachFlush();
       this.platform.onSyncChange = () => this._renderAccountLine();
@@ -57,7 +59,12 @@ class Game {
       } catch (e) {
         console.warn('[cloud] load failed, keeping local progress', e);
       }
+      await this._applyRemoteSettings();
     }
+    this.platform.loadBindings(DEFAULT_BINDINGS).then((b) => {
+      this.ui.setBindings(b);
+      if (this.session) this.ui.buildActionTray(this.session.legal);
+    });
 
     const s = this.store.profile.settings;
     this.ui.applyAccessibilityClasses(s);
@@ -82,8 +89,7 @@ class Game {
     }
     this.ui.renderGraphics(s.gfx, (words) => this.renderer?.graphicsInfo(words) ?? null, (gfx) => this._settingsChanged({ gfx }));
 
-    // Host integration: own-server clock (local dev) + account identity.
-    await this.platform.syncTime();
+    // Host integration: account identity (device clock; no own-server calls).
     const id = await this.platform.loadIdentity();
     if (!id.guest) {
       this.store.profile.name = id.name;
@@ -94,7 +100,6 @@ class Game {
     this._refreshTitle();
     this.ui.showScreen('title');
     this.machine = 'profile-ready';
-    this.platform.telemetry('start', 'boot', s.telemetryConsent);
 
     // Lifecycle: backgrounding pauses solo play and rendering.
     document.addEventListener('visibilitychange', () => {
@@ -137,10 +142,65 @@ class Game {
     }
   }
 
-  /** Profile chip + small cloud sync status (hosted only). */
+  /** Platform settings KV wins over local values for known preference keys. */
+  async _applyRemoteSettings() {
+    const remote = await this.platform.loadRemoteSettings();
+    const s = this.store.profile.settings;
+    this.platform.suspendSave(() => {
+      let changed = false;
+      for (const [k, v] of Object.entries(remote)) {
+        if (!(k in DEFAULT_SETTINGS) || v == null) continue;
+        if (typeof v !== typeof DEFAULT_SETTINGS[k] || JSON.stringify(s[k]) === JSON.stringify(v)) continue;
+        s[k] = v;
+        changed = true;
+      }
+      if (changed) this.store.saveProfile();
+    });
+    this.platform.syncSettings(this._prefs());
+  }
+
+  /** Player preferences mirrored to the StarHermit settings KV. */
+  _prefs() {
+    const s = this.store.profile.settings;
+    return Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((k) => [k, s[k]]));
+  }
+
+  /** Sign-in / invite buttons on the title, sign-out handling. */
+  _wirePlatform() {
+    const t = currentPlatformStrings();
+    const signIn = document.getElementById('btn-signin');
+    const invite = document.getElementById('btn-invite');
+    signIn.textContent = t.signIn;
+    invite.textContent = t.invite;
+    signIn.addEventListener('click', () => this.platform.signIn());
+    invite.addEventListener('click', async () => {
+      const link = this.platform.inviteLink();
+      if (!link) return;
+      try {
+        await navigator.clipboard.writeText(link);
+        this.ui.toast(t.inviteCopied);
+      } catch {
+        this.ui.toast(t.inviteFailed.replace('{link}', link));
+      }
+    });
+    this.platform.onAuthChange = ({ signedIn }) => {
+      if (!signedIn) this.ui.toast(t.signedOut);
+      this._renderAccountLine();
+    };
+  }
+
+  /** Profile chip (+ avatar) + small cloud sync status (hosted only). */
   _renderAccountLine() {
     const chip = document.getElementById('profile-chip');
     if (chip) chip.textContent = this.store.profile.name;
+    const avatar = document.getElementById('profile-avatar');
+    const src = this.platform.hosted ? this.platform.identity.avatar : null;
+    if (avatar) {
+      if (src) avatar.src = src;
+      avatar.classList.toggle('hidden', !src);
+    }
+    document.getElementById('btn-signin')?.classList.toggle('hidden', !this.platform.canSignIn());
+    document.getElementById('btn-invite')?.classList.toggle('hidden', !this.platform.inviteLink());
     const el = document.getElementById('sync-status');
     if (!el) return;
     if (!this.platform.hosted) { el.classList.add('hidden'); return; }
@@ -346,9 +406,6 @@ class Game {
     this.lastSetup = { cfg, mode: this.mode };
     this.store.clearSessionSnapshot();
     this._enterPlayfield(cfg);
-    this.platform.startActivity(this.mode);
-    this.platform.startPresence();
-    this.platform.telemetry('start', this.mode + ':' + cfg.id, s.telemetryConsent);
   }
 
   _enterPlayfield(cfg) {
@@ -357,7 +414,7 @@ class Game {
     this.ui.showScreen('game');
     // The playfield was display:none at boot — resize now that it has layout.
     if (this.renderer) requestAnimationFrame(() => { this.renderer.resize(); this.renderer.start(); });
-    this.ui.buildActionTray(this.session.legal, this.store.profile.settings.keybinds);
+    this.ui.buildActionTray(this.session.legal);
     this.ui.el('btn-undo').style.display = this.session.undoEnabled ? '' : 'none';
     this.ui.setCompatMessage(!this.renderer);
     if (this.renderer) {
@@ -367,7 +424,7 @@ class Game {
       this.renderer.setDecor(this.session.state.decorPlaced);
       this.renderer.setMood(rules.moodOf(this.session.state));
     }
-    this.ui.renderHelp(this.session.legal, this.store.profile.settings.keybinds);
+    this.ui.renderHelp(this.session.legal);
     this._updateHUD();
     this._hudLoop();
     this._saveSnapshot();
@@ -556,8 +613,6 @@ class Game {
     cancelAnimationFrame(this._hudRaf);
     this.ui.hideLessonBanner();
     this.lesson = null;
-    this.platform.endActivity(this.mode);
-    this.platform.stopPresence();
     this.session = null;
     this.machine = 'profile-ready';
   }
@@ -566,7 +621,6 @@ class Game {
     if (!this.lastSetup) return this._goto('modes');
     this.pendingConfig = this.lastSetup.cfg;
     this.mode = this.lastSetup.mode;
-    this.platform.telemetry('retry', this.lastSetup.cfg.id, this.store.profile.settings.telemetryConsent);
     this._beginSession();
   }
 
@@ -589,7 +643,6 @@ class Game {
     const step = this.lesson.steps[this.lessonStep];
     if (!step) return;
     this.ui.showLessonBanner(`<strong>${this.lesson.title}</strong> — ${step.text}`);
-    this.platform.telemetry('tutorial-step', `${this.lesson.id}:${this.lessonStep}`, this.store.profile.settings.telemetryConsent);
   }
 
   _lessonProgress(type, result, before) {
@@ -654,35 +707,12 @@ class Game {
     const newAchievements = this.store.evaluateAchievements(this.session)
       .map((id) => ACHIEVEMENTS.find((a) => a.id === id)?.name).filter(Boolean);
 
-    // Score submission: ranked boards are replay-validated by the game's own
-    // declared backend (authenticated with the account id when hosted).
+    // Scores stay on the local board: platform boards are read-only and the
+    // game never calls its own server.
     const best = p.bestScores[cfg.id];
     const boardId = this.mode === 'daily' ? `daily:${cfg.dailyKey}` : this.mode === 'chase' ? `chase:${cfg.seed}` : `stage:${cfg.id}`;
-    let comparison = score.total >= best ? 'New personal best!' : `Personal best: ${best}`;
-    if (this.session.ranked) {
-      const replay = this.session.exportReplay();
-      this.platform.submitScore(boardId, {
-        name: p.name,
-        ...(this.platform.userId ? { playerId: this.platform.userId } : {}),
-        score: score.total, ticks: st.tick,
-        invalidAttempts: st.invalidAttempts, assists: replay.assists,
-        contentVersion: replay.contentVersion, seed: replay.seed,
-        ruleset: cfg.stageId, duration: st.tick, replay,
-      }).then((r) => {
-        if (r?.ok) this.ui.toast('Score submitted to the ranked board');
-        else if (r?.casual) {
-          this.store.submitLocalScore(boardId, { name: p.name, score: score.total, ticks: st.tick, me: true });
-          this.ui.toast('Offline — score saved to the casual board');
-        } else if (this.platform.hosted) {
-          // No reachable validated backend (the own server is a local-dev
-          // route): keep the score on the casual board.
-          this.store.submitLocalScore(boardId, { name: p.name, score: score.total, ticks: st.tick, me: true });
-          this.ui.toast('Ranked board unavailable — score saved to the casual board');
-        } else this.ui.toast('Score rejected: ' + (r?.error || 'unknown'));
-      });
-    } else {
-      this.store.submitLocalScore(boardId, { name: p.name, score: score.total, ticks: st.tick, me: true });
-    }
+    const comparison = score.total >= best ? 'New personal best!' : `Personal best: ${best}`;
+    this.store.submitLocalScore(boardId, { name: p.name, score: score.total, ticks: st.tick, me: true });
 
     this._boardContext = { boardId, friends: false };
     const headline = completed
@@ -706,9 +736,6 @@ class Game {
     });
     this.store.clearSessionSnapshot();
     this.ui.showScreen('results');
-    this.platform.endActivity(this.mode);
-    this.platform.stopPresence();
-    this.platform.telemetry('round-end', `${this.mode}:${st.status}:${score.total}`, p.settings.telemetryConsent);
     // Open the board in the background data, not visually.
   }
 
@@ -730,17 +757,8 @@ class Game {
       if (!entries) entries = this.store.getLocalBoard(boardId);
     } else {
       title = 'Leaderboard — ' + boardId.split(':')[0];
-      const r = await this.platform.fetchBoard(boardId, { friends });
-      if (r.ok) {
-        entries = (r.data.entries || []).map((e) => ({
-          ...e,
-          me: e.me || !!(this.platform.userId && e.player === this.platform.userId),
-        }));
-        subtitle = r.data.validated ? 'Validated by replay' : 'Casual board';
-      } else {
-        entries = this.store.getLocalBoard(boardId);
-        subtitle = 'Casual local board (offline)';
-      }
+      entries = this.store.getLocalBoard(boardId);
+      subtitle = 'Casual local board';
     }
     this.ui.renderBoard({
       title,
@@ -780,7 +798,7 @@ class Game {
     } else if ('gfx' in patch) {
       document.body.dataset.gfxPreset = resolveGfx(s.gfx, 'low').preset;
     }
-    this.platform.telemetry('settings-change', Object.keys(patch).join(','), s.telemetryConsent);
+    this.platform.syncSettings(this._prefs());
   }
 
   _haptic(pattern) {

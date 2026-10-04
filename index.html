@@ -9,6 +9,8 @@
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
 <script src="browser-guard.js"></script>
+<script src="starhermit-sdk.js"></script>
+<script>StarHermit.init();</script>
 </head>
 <body>
 <div id="app">
@@ -19,6 +21,7 @@
   <header id="topbar">
     <h1 id="game-title">Pocket Companion</h1>
     <div id="topbar-right">
+      <img id="profile-avatar" class="avatar hidden" alt="" width="24" height="24">
       <span id="profile-chip" title="Profile">Guest</span>
       <span id="sync-status" class="sync-status hidden" role="status"></span>
       <button id="btn-help-top" class="icon-btn" aria-label="Help">?</button>
@@ -45,6 +48,10 @@
           <strong>Profile</strong>
           <span id="profile-status" class="card-sub">Bond, discoveries &amp; achievements</span>
         </button>
+      </div>
+      <div class="title-account">
+        <button id="btn-invite" class="btn hidden">Invite a friend</button>
+        <button id="btn-signin" class="btn hidden">Sign in with StarHermit</button>
       </div>
     </section>
 

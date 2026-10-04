@@ -25,8 +25,6 @@ export const DEFAULT_SETTINGS = {
   captions: true,
   cameraShake: true,
   tutorialSeen: {},
-  keybinds: null,             // player overrides for desktop bindings
-  telemetryConsent: false,
 };
 
 export const ACHIEVEMENTS = [
