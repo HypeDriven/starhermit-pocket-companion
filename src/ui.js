@@ -179,8 +179,10 @@ export class UI {
     const el = document.createElement('div');
     el.className = 'float-text';
     el.textContent = text;
-    el.style.left = x + 'px';
-    el.style.top = y + 'px';
+    // x/y are visual (client-rect) px; #app is CSS-zoomed by UIScale, so convert to layout px.
+    const z = (window.UIScale && UIScale.value) || 1;
+    el.style.left = x / z + 'px';
+    el.style.top = y / z + 'px';
     layer.appendChild(el);
     setTimeout(() => el.remove(), 1200);
   }
@@ -277,8 +279,9 @@ export class UI {
     const bubble = this.el('craving-bubble');
     if (bubble.classList.contains('hidden') || !pos || pos.behind) return;
     const field = this.el('playfield').getBoundingClientRect();
-    bubble.style.left = Math.max(60, Math.min(field.width - 60, pos.x - field.left)) + 'px';
-    bubble.style.top = Math.max(50, pos.y - field.top) + 'px';
+    const z = (window.UIScale && UIScale.value) || 1; // rects are visual px; style is layout px under #app zoom
+    bubble.style.left = Math.max(60, Math.min(field.width / z - 60, (pos.x - field.left) / z)) + 'px';
+    bubble.style.top = Math.max(50, (pos.y - field.top) / z) + 'px';
   }
 
   setCompatMessage(show) { this.el('compat-message').classList.toggle('hidden', !show); }

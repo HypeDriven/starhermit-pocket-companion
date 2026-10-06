@@ -757,7 +757,7 @@ export class Renderer3D {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (w < 2 || h < 2) return; // game screen hidden: nothing to draw
     this._adapt(dtMs);
-    const ratio = Math.min(3, Math.max(0.25, Math.min(window.devicePixelRatio || 1, this.q.dprCap) * this.q.scale * this.adaptiveScale));
+    const ratio = Math.min(3, Math.max(0.25, Math.min(window.devicePixelRatio || 1, this.q.dprCap) * ((window.UIScale && UIScale.value) || 1) * this.q.scale * this.adaptiveScale));
     if (w !== this.size[0] || h !== this.size[1] || ratio !== this.pixelRatio) {
       this.size = [w, h];
       this.pixelRatio = ratio;

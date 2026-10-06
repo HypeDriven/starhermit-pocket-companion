@@ -44,6 +44,8 @@ body {
   overflow: hidden;
 }
 #app { display: flex; flex-direction: column; height: 100%; }
+/* Large screens: ui-scale.js sets --ui-scale (1 up to 1600x1000); the whole app zooms by it, vw/vh are divided. */
+#app { zoom: var(--ui-scale, 1); }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; margin: -1px;
@@ -118,8 +120,8 @@ kbd {
 /* ---------- title ---------- */
 #screen-title { justify-content: center; }
 .title-hero {
-  height: clamp(90px, 18vh, 180px); display: grid; place-items: center; position: relative;
-  width: clamp(160px, 30vh, 280px);
+  height: clamp(90px, calc(18vh / var(--ui-scale, 1)), 180px); display: grid; place-items: center; position: relative;
+  width: clamp(160px, calc(30vh / var(--ui-scale, 1)), 280px);
 }
 /* Warm lamplight halo + floor shadow behind the hero Mote. */
 .title-hero::before {
@@ -128,12 +130,12 @@ kbd {
   pointer-events: none;
 }
 .title-hero::after {
-  content: ''; position: absolute; bottom: 4%; left: 50%; width: clamp(60px, 11vh, 110px); height: 12px;
+  content: ''; position: absolute; bottom: 4%; left: 50%; width: clamp(60px, calc(11vh / var(--ui-scale, 1)), 110px); height: 12px;
   transform: translateX(-50%); border-radius: 50%;
   background: radial-gradient(closest-side, rgba(0, 0, 0, 0.45), transparent);
 }
 .hero-mote {
-  width: clamp(70px, 14vh, 130px); height: clamp(70px, 14vh, 130px);
+  width: clamp(70px, calc(14vh / var(--ui-scale, 1)), 130px); height: clamp(70px, calc(14vh / var(--ui-scale, 1)), 130px);
   border-radius: 48% 52% 50% 50% / 55% 55% 45% 45%;
   background:
     radial-gradient(circle at 30% 60%, rgba(240, 144, 138, 0.55) 0 7%, transparent 9%),
@@ -321,7 +323,7 @@ body[data-handed="left"] #action-tray { flex-direction: row-reverse; }
 
 .lesson-banner {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  max-width: min(560px, 92vw); z-index: 5;
+  max-width: min(560px, calc(92vw / var(--ui-scale, 1))); z-index: 5;
   background: #fff8ee; color: #3a2c20; border-radius: var(--radius);
   padding: 12px 18px; font-weight: 600;
   filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4));
@@ -329,7 +331,7 @@ body[data-handed="left"] #action-tray { flex-direction: row-reverse; }
 
 /* ---------- results ---------- */
 .results-headline { font-size: 1.4em; font-weight: 800; margin: 0; }
-.results-table { border-collapse: collapse; min-width: min(420px, 90vw); }
+.results-table { border-collapse: collapse; min-width: min(420px, calc(90vw / var(--ui-scale, 1))); }
 .results-table td { padding: 6px 16px; border-bottom: 1px solid var(--panel-border); }
 .results-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .results-table tr.total td { font-weight: 800; color: var(--accent); border-top: 2px solid var(--panel-border); }
@@ -406,7 +408,7 @@ body[data-handed="left"] #action-tray { flex-direction: row-reverse; }
   position: fixed; bottom: calc(90px + var(--safe-bottom)); left: 50%; transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.75); color: #fff; border-radius: 8px;
   padding: 4px 14px; font-size: 0.9em; pointer-events: none; opacity: 0;
-  transition: opacity 0.25s ease; z-index: 60; max-width: 90vw; text-align: center;
+  transition: opacity 0.25s ease; z-index: 60; max-width: calc(90vw / var(--ui-scale, 1)); text-align: center;
 }
 .caption-line.show { opacity: 1; }
 body[data-motion="reduced"] .caption-line { transition: none; }
