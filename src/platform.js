@@ -3,7 +3,7 @@
  * (starhermit-sdk.js, loaded as a classic script before the game modules):
  * launch token + renewal, sign-in, account nickname + avatar, cloud save
  * (slot game:<slug>), per-player settings KV, keyboard bindings, invite link
- * and read-only platform leaderboards. Hosted mode is "the SDK holds a
+ * and the `high-score` platform leaderboard (post + read). Hosted mode is "the SDK holds a
  * token"; without one no request is made at all and play is local. The
  * game never calls its own server routes (/api, /ws): the device clock is
  * authoritative and boards/achievements are local. localStorage remains the
@@ -143,12 +143,27 @@ export class Platform {
   /* ================= leaderboards ================= */
 
   /**
-   * Platform leaderboard (read-only): the game's first board, with user ids
-   * resolved to nicknames. Null when unavailable / no board.
+   * Post a finished ranked session to the `high-score` board through the game's
+   * score-script.js (StarHermit.submitScores) → { posted, rank }.
+   */
+  async submitScore(total) {
+    if (!this.hosted) return { posted: false, rank: null };
+    const keys = await sdk().submitScores({ 'high-score': total });
+    if (!keys || !keys.includes('high-score')) return { posted: false, rank: null };
+    try {
+      const r = await sdk().leaderboard('high-score', { pageSize: 100 });
+      const me = (r.items || []).find((i) => String(i.userId) === this.userId);
+      return { posted: true, rank: me ? me.rank : null };
+    } catch { return { posted: true, rank: null }; }
+  }
+
+  /**
+   * The `high-score` board, with user ids resolved to nicknames. Null when
+   * unavailable / no board.
    */
   async loadLeaderboard({ friends = false, pageSize = 20 } = {}) {
     if (!this.hosted) return null;
-    const r = await sdk().leaderboard(null, { pageSize, scope: friends ? 'friends' : undefined });
+    const r = await sdk().leaderboard('high-score', { pageSize, scope: friends ? 'friends' : undefined });
     if (!r || !r.board) return null;
     return Promise.all((r.items || []).map(async (row) => {
       const uid = row.userId ?? '';

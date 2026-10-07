@@ -707,8 +707,8 @@ class Game {
     const newAchievements = this.store.evaluateAchievements(this.session)
       .map((id) => ACHIEVEMENTS.find((a) => a.id === id)?.name).filter(Boolean);
 
-    // Scores stay on the local board: platform boards are read-only and the
-    // game never calls its own server.
+    // Scores also stay on the local board; ranked sessions post to the
+    // platform `high-score` board when signed in (see _postToLeaderboard).
     const best = p.bestScores[cfg.id];
     const boardId = this.mode === 'daily' ? `daily:${cfg.dailyKey}` : this.mode === 'chase' ? `chase:${cfg.seed}` : `stage:${cfg.id}`;
     const comparison = score.total >= best ? 'New personal best!' : `Personal best: ${best}`;
@@ -736,7 +736,22 @@ class Game {
     });
     this.store.clearSessionSnapshot();
     this.ui.showScreen('results');
-    // Open the board in the background data, not visually.
+    this._postToLeaderboard(this.session.ranked ? Math.max(0, score.total) : null);
+  }
+
+  /** Signed in only: post a ranked session's total and show the board rank. */
+  _postToLeaderboard(total) {
+    const line = document.getElementById('results-lb');
+    if (total == null || !this.platform.hosted) { line.hidden = true; return; }
+    const t = currentPlatformStrings();
+    line.hidden = false;
+    line.textContent = t.lbPosting;
+    const session = this.session;
+    this.platform.submitScore(total).then((r) => {
+      if (this.session !== session) return;
+      line.textContent = !r.posted ? t.lbNotPosted
+        : r.rank ? t.lbRank.replace('{rank}', r.rank) : t.lbPosted;
+    });
   }
 
   async _loadBoard(friends) {

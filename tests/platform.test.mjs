@@ -30,7 +30,7 @@ function install(href) {
     if (url.endsWith('/settings') && init.method === 'PATCH') { Object.assign(kv, JSON.parse(init.body).settings); return j({}); }
     if (url.endsWith('/settings')) return j({ settings: kv });
     if (url.endsWith('/controls')) return j({ actions: [{ action: 'hint', codes: ['KeyQ'] }] });
-    if (url.endsWith('/leaderboards')) return j([{ id: 'b1', key: 'score' }]);
+    if (url.endsWith('/leaderboards')) return j([{ id: 'b1', key: 'high-score' }]);
     if (url.startsWith('/api/v1/leaderboards/b1/entries')) return j({ items: [{ userId: 'user-77aa88bb', score: 50, ticks: 9 }] });
     return r(404, '');
   };

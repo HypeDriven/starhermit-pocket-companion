@@ -331,6 +331,7 @@ body[data-handed="left"] #action-tray { flex-direction: row-reverse; }
 
 /* ---------- results ---------- */
 .results-headline { font-size: 1.4em; font-weight: 800; margin: 0; }
+.results-lb { margin: 6px 0 0; font-weight: 700; }
 .results-table { border-collapse: collapse; min-width: min(420px, calc(90vw / var(--ui-scale, 1))); }
 .results-table td { padding: 6px 16px; border-bottom: 1px solid var(--panel-border); }
 .results-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }

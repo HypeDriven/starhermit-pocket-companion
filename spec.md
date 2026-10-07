@@ -171,7 +171,7 @@ Follow the skill pack's acceptance gate: deterministic seeds, debug views for co
 - `ui`: responsive DOM shell, focus, localization, settings, overlays, accessibility mirror.
 - `audio`: buses, event mapping, focus/background behavior, decode and memory policy.
 - `content`: versioned levels, themes, tutorials, validation metadata.
-- `platform`: adapter over the shared StarHermit SDK: launch token and renewal, sign-in, account profile + avatar, cloud save (slot `game:<slug>`), settings KV, keyboard bindings, invite link, read-only platform leaderboards. It never calls the game's own server routes (`/api`, `/ws`).
+- `platform`: adapter over the shared StarHermit SDK: launch token and renewal, sign-in, account profile + avatar, cloud save (slot `game:<slug>`), settings KV, keyboard bindings, invite link, the `high-score` platform leaderboard (post + read). It never calls the game's own server routes (`/api`, `/ws`).
 
 No module may mutate rules state except through a validated command. Rendering consumes immutable snapshots plus interpolation data. UI state and simulation state are separate so closing a drawer cannot affect a match.
 
@@ -193,7 +193,7 @@ No module may mutate rules state except through a validated command. Rendering c
 ## 6. StarHermit integration
 
 ### Packaging and launch
-- The distribution has `starhermit.txt` at its root (`name=Pocket Companion`, `launch=index.html`, `server=server.js`, `control.*` lines). `index.html` loads the shared SDK `starhermit-sdk.js` (an unchanged copy of `tools/starhermit-sdk.js`) and calls `StarHermit.init()` before the game modules; `src/platform.js` is the game's adapter over `window.StarHermit`.
+- The distribution has `starhermit.txt` at its root (`name=Pocket Companion`, `launch=index.html`, `server=score-script.js`, `control.*` lines). `score-script.js` (canonical copy in the games repo's `tools/score-script.js`) is the platform script: it range-checks a posted total and writes it to the `high-score` board; `server.js` stays the local dev server. `index.html` loads the shared SDK `starhermit-sdk.js` (an unchanged copy of `tools/starhermit-sdk.js`) and calls `StarHermit.init()` before the game modules; `src/platform.js` is the game's adapter over `window.StarHermit`.
 - The SDK reads `#game_token=` (library launch) or `#access_token=` (direct sign-in return), strips the launch fragment, takes the slug from the `game_scope` claim and renews the token via `POST /api/v1/games/{slug}/launch-token`. Tokens are never persisted. When renewal is refused the game toasts that it is signed out and keeps playing locally.
 - Without a token no StarHermit request is made. On `<id>.starhermit.com` without a token the title shows **Sign in with StarHermit**, which redirects through the platform sign-in.
 - The client never calls the repo's `server.js` routes (time, boards, presence, activity, telemetry); without a launch token the game makes no network request beyond its static files.
@@ -207,7 +207,7 @@ No module may mutate rules state except through a validated command. Rendering c
 
 ### Achievements and leaderboards
 - Achievements are local (part of the cloud-saved profile); the platform has no server-declared achievements for this game.
-- Hosted, the board screen reads the game's first platform leaderboard read-only (friends scope available, nicknames resolved through profiles), and ranked results are kept on the local casual board — clients never submit scores. Standalone, the board screen shows the local casual board.
+- One platform board, `high-score` (integer, higher is better, 0–100,000). Hosted, every finished ranked session (Daily first completion, Challenge, Score chase; no timing assist) posts its total (floored at 0) through `StarHermit.submitScores` (a practice session whose `score-script.js` posts it), and the results screen shows "Leaderboard rank: #N" (or posted / not posted), localized in the nine locales (`src/platform-i18n.js`). The board screen reads `high-score` (friends scope available, nicknames resolved through profiles); results also stay on the local casual board. Standalone, nothing is posted and the board screen shows the local casual board.
 
 ### Not used
 - Matchmaking, sessions, chat, friends picker, replays, realtime rooms and voice: the game is solo.
