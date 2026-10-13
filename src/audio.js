@@ -44,7 +44,7 @@ export class AudioEngine {
       const g = this.ctx.createGain();
       g.gain.value = this.getSettings()[bus] ?? 0.7;
       g.connect(master);
-      this.buses[bus] = g;
+      this.buses[bus] = (globalThis.GameOptions ? globalThis.GameOptions.tagBus(g, bus) : g);
     }
     document.removeEventListener('pointerdown', this._pendingUnlock);
     document.removeEventListener('keydown', this._pendingUnlock);
@@ -93,7 +93,7 @@ export class AudioEngine {
     if (!buf) { this._sfxBuffer(sample); return false; } // load for next time; synth now
     const caption = EVENT_CAPTIONS[name];
     if (caption) this._caption(caption);
-    const src = this.ctx.createBufferSource();
+    const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), name) : this.ctx.createBufferSource());
     src.buffer = buf;
     src.connect(this.buses.effects || this.master);
     src.start();
@@ -127,7 +127,7 @@ export class AudioEngine {
     const rng = makeRng(variantSeed >>> 0);
     const detune = 1 + (rng.range(100) - 50) / 400; // ±12.5%
     const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
+    const osc = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createOscillator(), bus) : this.ctx.createOscillator());
     const g = this.ctx.createGain();
     osc.type = type;
     osc.frequency.setValueAtTime(freq * detune, t);
@@ -180,7 +180,7 @@ export class AudioEngine {
     const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * 0.4;
-    const src = this.ctx.createBufferSource();
+    const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), null) : this.ctx.createBufferSource());
     src.buffer = buf; src.loop = true;
     const filt = this.ctx.createBiquadFilter();
     filt.type = 'lowpass'; filt.frequency.value = 500; filt.Q.value = 0.4;

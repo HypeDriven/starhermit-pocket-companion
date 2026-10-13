@@ -773,8 +773,8 @@ export class Renderer3D {
     if (this.composer) {
       this.aoCamera.copy(this.camera);
       this.aoCamera.layers.set(0);
-      this.composer.render(dtMs / 1000);
-    } else this.renderer.render(this.scene, this.camera);
+      (globalThis.GameOptions ? globalThis.GameOptions.draw(this.composer.renderer, () => this.composer.render(dtMs / 1000)) : this.composer.render(dtMs / 1000));
+    } else (globalThis.GameOptions ? globalThis.GameOptions.draw(this.renderer, () => this.renderer.render(this.scene, this.camera)) : this.renderer.render(this.scene, this.camera));
   }
 
   setReducedMotion(v) { this.reducedMotion = !!v; }
