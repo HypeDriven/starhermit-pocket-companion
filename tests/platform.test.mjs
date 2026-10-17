@@ -15,7 +15,9 @@ const TOKEN = `h.${b64u({ sub: 'user-77aa88bb', game_scope: 'pc-slug', exp: Math
 function install(href) {
   const calls = [];
   const saves = {};
-  const kv = { music: 0.1 };
+  const etags = {};
+  let version = 0;
+  const kv = { music: 0.1, 'ui.language': { choice: 'pt-BR' } };
   const fetch = async (url, init = {}) => {
     calls.push({ url, method: init.method || 'GET', init });
     const r = (status, body) => new Response(body, { status });
@@ -23,8 +25,20 @@ function install(href) {
     if (url === '/api/v1/users/user-77aa88bb/profile') return j({ username: 'hidden', nickname: 'Moss' });
     if (url === '/api/v1/users/user-77aa88bb/avatar') return r(404, '');
     if (url.includes('/cloud-saves/')) {
-      const key = decodeURIComponent(url.split('/cloud-saves/')[1]);
-      if (init.method === 'PUT') { saves[key] = Buffer.from(JSON.parse(init.body).dataBase64, 'base64'); return j({}); }
+      // Versioned slot like the platform: /info carries the ETag, a PUT must
+      // match it (If-Match) or target an empty slot (If-None-Match: *), else 412.
+      const rest = decodeURIComponent(url.split('/cloud-saves/')[1]);
+      const key = rest.replace(/\/info$/, '');
+      if (rest.endsWith('/info')) return j(saves[key] ? { exists: true, etag: etags[key] } : { exists: false });
+      if (init.method === 'PUT') {
+        const hd = init.headers || {};
+        if ((hd['If-Match'] && hd['If-Match'] !== etags[key]) || (hd['If-None-Match'] === '*' && saves[key])) {
+          return r(412, JSON.stringify({ error: 'precondition failed', etag: etags[key] }));
+        }
+        saves[key] = Buffer.from(JSON.parse(init.body).dataBase64, 'base64');
+        etags[key] = `"v${++version}"`;
+        return j({ etag: etags[key] });
+      }
       return saves[key] ? r(200, saves[key]) : r(404, '');
     }
     if (url.endsWith('/settings') && init.method === 'PATCH') { Object.assign(kv, JSON.parse(init.body).settings); return j({}); }
@@ -40,7 +54,7 @@ function install(href) {
   globalThis.document = { addEventListener() {}, hidden: false };
   globalThis.fetch = fetch;
   globalThis.StarHermit = SDK.create({ window: { location: loc, history: { replaceState() {} } }, fetch, setTimeout: () => 0, clearTimeout: () => {} });
-  return { calls, saves, kv };
+  return { calls, saves, etags, kv, fetch, loc };
 }
 
 test('hosted: token, identity, cloud save game:<slug>, settings, bindings, board', async () => {
@@ -60,8 +74,8 @@ test('hosted: token, identity, cloud save game:<slug>, settings, bindings, board
   assert.deepEqual(Object.keys(h.saves), ['game:pc-slug']);
   assert.deepEqual(await p.cloudLoad(), doc);
 
-  assert.deepEqual(await p.loadRemoteSettings(), { music: 0.1 });
-  await p.syncSettings({ music: 0.1, haptics: false });
+  assert.deepEqual(await p.loadRemoteSettings(), { music: 0.1, 'ui.language': { choice: 'pt-BR' } });
+  await p.syncSettings({ music: 0.1, haptics: false, 'ui.language': { choice: 'de-DE' } }); // ui.* never mirrored
   const patches = h.calls.filter((c) => c.method === 'PATCH');
   assert.deepEqual(patches.map((c) => JSON.parse(c.init.body)), [{ settings: { haptics: false } }]);
 
@@ -90,4 +104,33 @@ test('standalone: no request at all (even on localhost)', async () => {
   assert.equal(p.canSignIn(), false);
   assert.ok(Math.abs(p.now() - Date.now()) < 50);
   assert.equal(h.calls.length, 0);
+});
+
+test('hosted: a save that lost to another device reloads, merges and saves on top', async () => {
+  const h = install(`https://x.test/#game_token=${TOKEN}`);
+  const { Platform } = await import('../src/platform.js?conflict');
+  const { mergeProfile, mergeBoards } = await import('../src/storage.js');
+  const p = new Platform();
+  p.init();
+  assert.equal(await p.cloudLoad(), null); // empty slot → next write is If-None-Match: *
+  const other = SDK.create({ window: { location: h.loc, history: { replaceState() {} } }, fetch: h.fetch, setTimeout: () => 0, clearTimeout: () => {} });
+  other.init();
+  const remote = { profile: { name: 'Moss', journey: { c1s2: { stars: 3, bestScore: 400, completedAt: 5 } }, achievements: { 'first-light': 10 }, sessionsPlayed: 7, discoveries: ['feed', 'wash'], settings: { music: 0.9 } }, boards: { 'stage:c1s2': [{ name: 'Moss', score: 400, ticks: 30 }] } };
+  assert.equal(await other.writeSave(JSON.stringify(remote)), true);
+  let local = { profile: { name: 'Moss', journey: { c1s1: { stars: 2, bestScore: 200, completedAt: 3 } }, achievements: {}, sessionsPlayed: 2, discoveries: ['pet'], settings: { music: 0.2 } }, boards: { 'stage:c1s1': [{ name: 'Moss', score: 200, ticks: 20 }] } };
+  p.docProvider = () => local;
+  const got = new Promise((resolve) => { p.onSaveConflict = resolve; });
+  p.scheduleCloudSave();
+  assert.equal(await p.flushCloudSave(), false);
+  const doc = await got;
+  assert.deepEqual(doc, remote);
+  const profile = mergeProfile(doc.profile, local.profile, { keepLocalSettings: true });
+  assert.deepEqual(Object.keys(profile.journey).sort(), ['c1s1', 'c1s2']);
+  assert.equal(profile.sessionsPlayed, 7);
+  assert.deepEqual(profile.discoveries.sort(), ['feed', 'pet', 'wash']);
+  assert.equal(profile.settings.music, 0.2); // this device's settings on a conflict
+  assert.deepEqual(Object.keys(mergeBoards(doc.boards, local.boards)).sort(), ['stage:c1s1', 'stage:c1s2']);
+  local = { profile, boards: mergeBoards(doc.boards, local.boards) };
+  p.scheduleCloudSave();
+  assert.equal(await p.flushCloudSave(), true);
 });

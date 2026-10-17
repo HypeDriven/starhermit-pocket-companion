@@ -192,3 +192,60 @@ export function migrateProfile(p) {
   out.v = SAVE_VERSION;
   return out;
 }
+
+/**
+ * Cloud merge (start-up load and `saveconflict`): neither side's progress is
+ * dropped. Journey records keep the most stars and best score, daily results
+ * and per-stage bests keep the higher score, achievements keep the earliest
+ * unlock, discoveries / decor / lessons / daily days are unioned, sessions
+ * played takes the larger count. Settings, name and theme come from the remote
+ * copy unless `keepLocalSettings` (a conflict: this device's settings win);
+ * tutorial flags are unioned either way.
+ */
+export function mergeProfile(remote, local, { keepLocalSettings = false } = {}) {
+  const r = migrateProfile(remote || {}), l = migrateProfile(local || {});
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  const journey = { ...r.journey };
+  for (const [id, b] of Object.entries(l.journey)) {
+    const a = journey[id];
+    journey[id] = !a ? b : {
+      stars: Math.max(num(a.stars), num(b.stars)),
+      bestScore: Math.max(num(a.bestScore), num(b.bestScore)),
+      completedAt: Math.min(num(a.completedAt) || Infinity, num(b.completedAt) || Infinity) || 0,
+    };
+  }
+  const daily = { ...r.daily };
+  for (const [k, v] of Object.entries(l.daily)) daily[k] = !daily[k] || num(v?.score) > num(daily[k]?.score) ? v : daily[k];
+  const bestScores = { ...r.bestScores };
+  for (const [k, v] of Object.entries(l.bestScores)) bestScores[k] = Math.max(num(bestScores[k]), num(v));
+  const achievements = { ...r.achievements };
+  for (const [k, v] of Object.entries(l.achievements)) achievements[k] = achievements[k] ? Math.min(achievements[k], v) : v;
+  const union = (a, b) => [...new Set([...(a || []), ...(b || [])])];
+  const pref = keepLocalSettings ? l : r;
+  return {
+    ...l,
+    name: pref.name === 'Guest' ? (keepLocalSettings ? r : l).name : pref.name,
+    settings: { ...pref.settings, tutorialSeen: { ...r.settings.tutorialSeen, ...l.settings.tutorialSeen } },
+    lastTheme: pref.lastTheme,
+    createdAt: Math.min(num(r.createdAt) || Infinity, num(l.createdAt) || Infinity) || 0,
+    journey, daily, bestScores, achievements,
+    lessonsDone: { ...r.lessonsDone, ...l.lessonsDone },
+    discoveries: union(r.discoveries, l.discoveries),
+    decorUnlocked: union(r.decorUnlocked, l.decorUnlocked),
+    dailyDays: union(r.dailyDays, l.dailyDays).sort(),
+    sessionsPlayed: Math.max(num(r.sessionsPlayed), num(l.sessionsPlayed)),
+  };
+}
+
+/** Local casual boards from both sides, de-duplicated, best 50 per board. */
+export function mergeBoards(remote, local) {
+  const out = {};
+  for (const id of new Set([...Object.keys(remote || {}), ...Object.keys(local || {})])) {
+    const seen = new Set();
+    out[id] = [...(local?.[id] || []), ...(remote?.[id] || [])]
+      .filter((e) => { const k = JSON.stringify(e); if (seen.has(k)) return false; seen.add(k); return true; })
+      .sort((a, b) => b.score - a.score || a.ticks - b.ticks)
+      .slice(0, 50);
+  }
+  return out;
+}

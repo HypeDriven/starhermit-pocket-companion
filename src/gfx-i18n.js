@@ -1,6 +1,6 @@
 /**
  * Pocket Companion — strings for the Settings tabs and the Graphics panel.
- * The locale follows navigator.language (the game has no language setting).
+ * The locale is the game language (src/i18n.js getLocale()), read at use time.
  */
 
 const EN = {

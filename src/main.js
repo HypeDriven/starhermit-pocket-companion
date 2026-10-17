@@ -8,9 +8,13 @@
 import * as rules from './rules.js';
 import * as content from './content.js';
 import { Session } from './session.js';
-import { Store, ACHIEVEMENTS, DEFAULT_SETTINGS, migrateProfile } from './storage.js';
+import { Store, ACHIEVEMENTS, DEFAULT_SETTINGS, migrateProfile, mergeProfile, mergeBoards } from './storage.js';
 import { Platform } from './platform.js';
-import { currentPlatformStrings } from './platform-i18n.js';
+import { platformStrings, pickPlatformLocale } from './platform-i18n.js';
+import { t, getLocale, onLocaleChange, contentName } from './i18n.js';
+
+// StarHermit account strings in the game language (read at use time).
+const ps = () => platformStrings(pickPlatformLocale(getLocale()));
 import { AudioEngine } from './audio.js';
 import { Renderer3D, webglAvailable } from './render.js';
 import { resolve as resolveGfx } from './gfx.js';
@@ -44,8 +48,8 @@ class Game {
 
   /* ================= boot ================= */
   async boot() {
-    // Host integration first: launch token, cloud doc (remote wins on
-    // conflict, local snapshot preserved), then platform identity. Each
+    // Host integration first: launch token, cloud doc (merged with local
+    // progress, local doc backed up), then platform identity. Each
     // step degrades gracefully to local guest play.
     this.platform.init();
     this.platform.docProvider = () => ({ profile: this.store.profile, boards: this.store.allBoards() });
@@ -70,7 +74,7 @@ class Game {
     this.ui.applyAccessibilityClasses(s);
     this.ui.renderSettings({ ...s, _name: this.store.profile.name, _hosted: this.platform.hosted }, (patch) => this._settingsChanged(patch));
     this.audio.armUnlockOnGesture();
-    this.audio.onCaption = (t) => this.ui.caption(t);
+    this.audio.onCaption = (text) => this.ui.caption(t(text));
 
     // Renderer (optional — the game stays playable without WebGL).
     const field = document.getElementById('playfield');
@@ -120,23 +124,29 @@ class Game {
     const p = this.store.profile;
     const today = content.dailyKeyFor(new Date(this.platform.now()));
     document.getElementById('daily-status').textContent =
-      p.daily[today] ? `Done today — ${p.daily[today].score} pts` : `Not yet played · ${today}`;
+      p.daily[today] ? t('Done today — {score} pts', { score: p.daily[today].score }) : t('Not yet played · {date}', { date: today });
     const done = Object.keys(p.journey).length;
-    document.getElementById('journey-status').textContent = `${done} / ${content.JOURNEY_STAGES.length} stages`;
+    document.getElementById('journey-status').textContent = t('{done} / {total} stages', { done, total: content.JOURNEY_STAGES.length });
   }
 
-  /** Apply the remote cloud doc; it wins on conflict (local doc is backed up). */
-  _applyRemoteDoc(remote) {
+  /**
+   * Merge a cloud doc into this device's progress (start-up load and
+   * `saveconflict`): best of both per record, nothing dropped (the local doc is
+   * backed up first). Settings come from the cloud copy at start-up and stay
+   * this device's on a conflict. The merged doc is then saved back.
+   */
+  _applyRemoteDoc(remote, { keepLocalSettings = false } = {}) {
     try {
       this.platform.suspendSave(() => {
         this.store.backupProfile();
         if (remote && typeof remote === 'object') {
-          if (remote.profile) this.store.profile = migrateProfile(remote.profile);
-          if (remote.boards && typeof remote.boards === 'object') this.store.replaceBoards(remote.boards);
+          if (remote.profile) this.store.profile = mergeProfile(migrateProfile(remote.profile), this.store.profile, { keepLocalSettings });
+          if (remote.boards && typeof remote.boards === 'object') this.store.replaceBoards(mergeBoards(remote.boards, this.store.allBoards()));
         }
         this.store.saveProfile();
       });
-      this.ui.toast('Progress synced from your account');
+      this.platform.scheduleCloudSave();
+      if (!keepLocalSettings) this.ui.toast(t('Progress synced from your account'));
     } catch (e) {
       console.warn('[cloud] apply failed', e);
     }
@@ -149,7 +159,8 @@ class Game {
     this.platform.suspendSave(() => {
       let changed = false;
       for (const [k, v] of Object.entries(remote)) {
-        if (!(k in DEFAULT_SETTINGS) || v == null) continue;
+        // platform-owned ui.* keys (ui.language) are not game settings
+        if (k.startsWith('ui.') || !(k in DEFAULT_SETTINGS) || v == null) continue;
         if (typeof v !== typeof DEFAULT_SETTINGS[k] || JSON.stringify(s[k]) === JSON.stringify(v)) continue;
         s[k] = v;
         changed = true;
@@ -167,32 +178,64 @@ class Game {
 
   /** Sign-in / invite buttons on the title, sign-out handling. */
   _wirePlatform() {
-    const t = currentPlatformStrings();
     const signIn = document.getElementById('btn-signin');
     const invite = document.getElementById('btn-invite');
-    signIn.textContent = t.signIn;
-    invite.textContent = t.invite;
+    const label = () => { signIn.textContent = ps().signIn; invite.textContent = ps().invite; };
+    label();
+    onLocaleChange(label);
     signIn.addEventListener('click', () => this.platform.signIn());
     invite.addEventListener('click', async () => {
       const link = this.platform.inviteLink();
       if (!link) return;
       try {
         await navigator.clipboard.writeText(link);
-        this.ui.toast(t.inviteCopied);
+        this.ui.toast(ps().inviteCopied);
       } catch {
-        this.ui.toast(t.inviteFailed.replace('{link}', link));
+        this.ui.toast(ps().inviteFailed.replace('{link}', link));
       }
     });
     this.platform.onAuthChange = ({ signedIn }) => {
-      if (!signedIn) this.ui.toast(t.signedOut);
+      if (!signedIn) this.ui.toast(ps().signedOut);
       this._renderAccountLine();
     };
+    // Another device saved first: reload, merge (best of both; this device's
+    // settings and session kept), save the merged doc again.
+    this.platform.onSaveConflict = (remote) => {
+      if (remote) this._applyRemoteDoc(remote, { keepLocalSettings: true });
+      else this.platform.scheduleCloudSave();
+      this._renderAccountLine();
+    };
+    onLocaleChange(() => this._relocalize());
+  }
+
+  /**
+   * Live language switching: static markup is re-applied by i18n.js; screens,
+   * HUD, tray, lesson banner and settings built in code re-render in place.
+   * The session and its clock are untouched.
+   */
+  _relocalize() {
+    this.ui.relabel();
+    this._renderAccountLine();
+    this._refreshTitle();
+    const screen = document.querySelector('.screen.active')?.id?.replace('screen-', '');
+    if (screen === 'journey') this.ui.renderJourney(content.JOURNEY_STAGES, this.store.profile.journey, this._journeyUnlockedCount());
+    if (screen === 'learn') this.ui.renderLessons(content.LESSONS, this.store.profile.settings.tutorialSeen || {});
+    if (screen === 'profile') this._renderProfile();
+    if (screen === 'setup' && this._lastPrepare) this._prepare(...this._lastPrepare);
+    if (screen === 'results' && this._results) this.ui.renderResults({ ...this._results(), quiet: true });
+    if (screen === 'board' && this._boardContext) this._loadBoard(this._boardContext.friends);
+    if (this._lb) this._refreshLeaderboardLine();
+    if (this.session && (this.machine === 'active' || this.machine === 'paused')) {
+      this._updateHUD();
+      if (this.lesson) this._showLessonStep(true);
+      if (!document.getElementById('overlay-decor').classList.contains('hidden')) this.ui.renderDecor(this.session.state.allowedDecor, this.session.state.decorPlaced);
+    }
   }
 
   /** Profile chip (+ avatar) + small cloud sync status (hosted only). */
   _renderAccountLine() {
     const chip = document.getElementById('profile-chip');
-    if (chip) chip.textContent = this.store.profile.name;
+    if (chip) chip.textContent = this._displayName();
     const avatar = document.getElementById('profile-avatar');
     const src = this.platform.hosted ? this.platform.identity.avatar : null;
     if (avatar) {
@@ -208,8 +251,14 @@ class Game {
       loading: 'syncing…', saving: 'saving…',
       synced: 'cloud synced', error: 'sync failed — kept on this device',
     }[this.platform.syncState];
-    el.textContent = note || '';
+    el.textContent = note ? t(note) : '';
     el.classList.toggle('hidden', !note);
+  }
+
+  /** The default guest name is shown in the game language. */
+  _displayName() {
+    const name = this.store.profile.name;
+    return !name || name === 'Guest' ? t('Guest') : name;
   }
 
   _offerResume(snap) {
@@ -217,7 +266,9 @@ class Game {
     if (!cfg) { this.store.clearSessionSnapshot(); return; }
     const card = document.createElement('button');
     card.className = 'card';
-    card.innerHTML = `<strong>Resume session</strong><span class="card-sub">${cfg.name} · tick ${snap.snapshot.tick ?? 0}</span>`;
+    const label = () => { card.innerHTML = `<strong>${t('Resume session')}</strong><span class="card-sub">${t('{name} · tick {n}', { name: contentName(cfg.name), n: snap.snapshot.tick ?? 0 })}</span>`; };
+    label();
+    const off = onLocaleChange(label);
     card.addEventListener('click', () => {
       try {
         const { session, away } = Session.restore(cfg, snap.snapshot, {
@@ -231,12 +282,13 @@ class Game {
         this.session = session;
         this.mode = snap.mode;
         this._enterPlayfield(cfg);
-        this.ui.toast(`Welcome back — ${away.ticks} ticks passed while you were away`);
-        this.ui.announce(`Session resumed. ${away.ticks} ticks passed while you were away.`);
+        this.ui.toast(t('Welcome back — {n} ticks passed while you were away', { n: away.ticks }));
+        this.ui.announce(t('Session resumed. {n} ticks passed while you were away.', { n: away.ticks }));
       } catch (e) {
         console.warn('[resume] failed', e);
         this.store.clearSessionSnapshot();
       }
+      off();
       card.remove();
     });
     document.querySelector('.title-cards').appendChild(card);
@@ -268,7 +320,7 @@ class Game {
       leave: () => this._leave(),
       undo: () => this._undo(),
       hint: () => this._hint(),
-      camera: () => this.renderer && this.ui.toast('Camera recentered'),
+      camera: () => this.renderer && this.ui.toast(t('Camera recentered')),
       retry: () => this._retry(),
       next: () => this._next(),
       boardTab: (friends) => this._loadBoard(friends),
@@ -315,7 +367,7 @@ class Game {
       const done = this.store.profile.daily[cfg.dailyKey];
       this._prepare(cfg, {
         ranked: this._isRankable() && !done,
-        extra: done ? `<p class="muted">You already completed today's challenge (${done.score} pts) — replays are casual.</p>` : '',
+        extra: done ? () => `<p class="muted">${t('You already completed today\'s challenge ({score} pts) — replays are casual.', { score: done.score })}</p>` : '',
       });
     } else if (mode === 'practice') {
       this.pendingOptions = { kind: 'practice', choices: content.PRACTICE_DIFFICULTIES.map((d) => d.id), picked: 'steady' };
@@ -333,25 +385,27 @@ class Game {
   }
 
   _optionsHTML(kind, choices) {
-    return choices.map(([id, name]) =>
-      `<button class="btn setup-choice" data-kind="${kind}" data-id="${id}">${name}</button>`).join('');
+    return () => choices.map(([id, name]) =>
+      `<button class="btn setup-choice" data-kind="${kind}" data-id="${id}">${t(name)}</button>`).join('');
   }
 
   _prepare(cfg, opts = {}) {
     this.pendingConfig = cfg;
+    this._lastPrepare = [cfg, opts];
     const rulesText = [
-      cfg.allowedActions.map((a) => rules.ACTIONS[a]?.label || a).join(', '),
-      cfg.tickLimit ? `${cfg.tickLimit}-tick limit` : 'no time limit',
-      cfg.maxCommands ? `${cfg.maxCommands}-move limit` : null,
+      cfg.allowedActions.map((a) => (rules.ACTIONS[a] ? t(rules.ACTIONS[a].label) : a)).join(', '),
+      cfg.tickLimit ? t('{n}-tick limit', { n: cfg.tickLimit }) : t('no time limit'),
+      cfg.maxCommands ? t('{n}-move limit', { n: cfg.maxCommands }) : null,
     ].filter(Boolean).join(' · ');
+    const extra = typeof opts.extra === 'function' ? opts.extra() : (opts.extra || '');
     this.ui.renderSetup({
-      name: cfg.name,
-      intro: (opts.extra || '') + (cfg.intro || ''),
+      name: contentName(cfg.name),
+      intro: extra + (cfg.intro ? t(cfg.intro) : ''),
       rules: rulesText,
-      duration: `~${Math.max(1, Math.round(cfg.tickLimit / 40))} min`,
+      duration: t('~{n} min', { n: Math.max(1, Math.round(cfg.tickLimit / 40)) }),
       ranked: opts.ranked,
-      rankedLabel: opts.ranked ? 'Ranked' : 'Casual — not ranked',
-      optionsHTML: opts.options || '',
+      rankedLabel: opts.ranked ? t('Ranked') : t('Casual — not ranked'),
+      optionsHTML: typeof opts.options === 'function' ? opts.options() : (opts.options || ''),
     });
     this.ui.showScreen('setup');
     // Bind setup choice buttons.
@@ -428,7 +482,7 @@ class Game {
     this._updateHUD();
     this._hudLoop();
     this._saveSnapshot();
-    this.ui.announce(`${cfg.name}. ${this._objectiveText(cfg)}. Session started.`, true);
+    this.ui.announce(t('{name}. {objective}. Session started.', { name: contentName(cfg.name), objective: this._objectiveText(cfg) }), true);
     if (this.lesson) this._showLessonStep();
   }
 
@@ -457,7 +511,7 @@ class Game {
     if (!result.ok) {
       this.audio.event('invalid');
       this.renderer?.invalidWobble();
-      const reason = rules.INVALID_REASONS[result.reason] || 'Not possible right now.';
+      const reason = t(rules.INVALID_REASONS[result.reason] || 'Not possible right now.');
       this.ui.announce(reason, true);
       this.ui.toast(reason);
       this._haptic(30);
@@ -471,8 +525,8 @@ class Game {
     this.audio.event(st.lastEvent?.action || type, st.seed + st.tick);
     if (result.discoveryGain > 0) {
       this.audio.event('discovery');
-      const label = rules.ACTIONS[type]?.label || type;
-      this.ui.toast(`Discovered: ${label}! +${result.discoveryGain}`);
+      const label = rules.ACTIONS[type] ? t(rules.ACTIONS[type].label) : type;
+      this.ui.toast(t('Discovered: {action}! +{n}', { action: label, n: result.discoveryGain }));
       this.store.recordDiscovery(type);
       if (type === 'decorate' && args.item) this.store.recordDiscovery('decor:' + args.item);
     }
@@ -480,8 +534,8 @@ class Game {
     const newBond = this.session.bondLevel;
     if (newBond > prevBond) {
       this.audio.event('bond-up');
-      this.ui.toast(`Bond level ${newBond}!`);
-      this.ui.announce(`Bond level up — level ${newBond}.`);
+      this.ui.toast(t('Bond level {n}!', { n: newBond }));
+      this.ui.announce(t('Bond level up — level {n}.', { n: newBond }));
     }
     if (this.renderer) {
       this.renderer.react(st.lastEvent?.action || type, rules.ACTIONS[type]?.kind || 'pass', {
@@ -517,7 +571,7 @@ class Game {
     if (st.craving && !this._cravingAnnounced) {
       this._cravingAnnounced = true;
       this.audio.event('craving');
-      this.ui.announce(`Mote ${st.craving.need === 'hunger' ? 'is hungry' : st.craving.need === 'hygiene' ? 'wants a bath' : st.craving.need === 'fun' ? 'wants to play' : 'is sleepy'}.`);
+      this.ui.announce(t(st.craving.need === 'hunger' ? 'Mote is hungry.' : st.craving.need === 'hygiene' ? 'Mote wants a bath.' : st.craving.need === 'fun' ? 'Mote wants to play.' : 'Mote is sleepy.'));
     } else if (!st.craving) {
       this._cravingAnnounced = false;
     }
@@ -530,7 +584,7 @@ class Game {
       // Not a legal pet right now (overjoyed, resolving, finished): still answer the touch.
       if (this.renderer) this.renderer.react('pet', 'ack');
       this.audio.event('ack');
-      this.ui.announce('Mote wiggles happily.');
+      this.ui.announce(t('Mote wiggles happily.'));
     }
   }
 
@@ -545,14 +599,14 @@ class Game {
     if (this.machine !== 'active' && this.machine !== 'paused') return;
     if (this.session.undo()) {
       this.audio.event('ui-close');
-      this.ui.toast('Undone');
+      this.ui.toast(t('Undone'));
       this._afterAction(this.session.state);
       if (this.renderer) {
         this.renderer.setMood(rules.moodOf(this.session.state));
         this.renderer.setDecor(this.session.state.decorPlaced);
       }
     } else {
-      this.ui.announce('Nothing to undo.');
+      this.ui.announce(t('Nothing to undo.'));
     }
   }
 
@@ -578,8 +632,8 @@ class Game {
     this.ui.markSuggested(suggestion);
     if (suggestion) {
       const def = rules.ACTIONS[suggestion];
-      this.ui.announce(`Hint: try ${def.label}. ${def.blurb}`);
-      this.ui.toast(`Hint: ${def.label}`);
+      this.ui.announce(t('Hint: try {action}. {blurb}', { action: t(def.label), blurb: t(def.blurb) }));
+      this.ui.toast(t('Hint: {action}', { action: t(def.label) }));
     }
   }
 
@@ -599,7 +653,7 @@ class Game {
     this.machine = 'active';
     if (!fromOverlay) this.ui.closeOverlay('pause');
     const away = this.session.awaySummary();
-    if (away && away.ticks > 0) this.ui.toast(`While paused: ${away.ticks} ticks, ${away.scoreDelta} pts`);
+    if (away && away.ticks > 0) this.ui.toast(t('While paused: {n} ticks, {score} pts', { n: away.ticks, score: away.scoreDelta }));
     this.audio.event('ui-close');
   }
 
@@ -639,10 +693,10 @@ class Game {
   }
 
   /* ================= lessons ================= */
-  _showLessonStep() {
+  _showLessonStep(quiet = false) {
     const step = this.lesson.steps[this.lessonStep];
     if (!step) return;
-    this.ui.showLessonBanner(`<strong>${this.lesson.title}</strong> — ${step.text}`);
+    this.ui.showLessonBanner(`<strong>${t(this.lesson.title)}</strong> — ${t(step.text)}`, quiet);
   }
 
   _lessonProgress(type, result, before) {
@@ -660,8 +714,8 @@ class Game {
         this.store.profile.settings.tutorialSeen[this.lesson.id] = true;
         this.store.saveProfile();
         this.ui.hideLessonBanner();
-        this.ui.toast('Lesson complete! Finish the stage to keep going.');
-        this.ui.announce('Lesson complete. You can finish the stage now.');
+        this.ui.toast(t('Lesson complete! Finish the stage to keep going.'));
+        this.ui.announce(t('Lesson complete. You can finish the stage now.'));
         this.lesson = null;
       } else {
         this._showLessonStep();
@@ -706,34 +760,37 @@ class Game {
 
     const newAchievements = this.store.evaluateAchievements(this.session)
       .map((id) => ACHIEVEMENTS.find((a) => a.id === id)?.name).filter(Boolean);
+    const hasNext = this.mode === 'journey' && completed;
 
     // Scores also stay on the local board; ranked sessions post to the
     // platform `high-score` board when signed in (see _postToLeaderboard).
     const best = p.bestScores[cfg.id];
     const boardId = this.mode === 'daily' ? `daily:${cfg.dailyKey}` : this.mode === 'chase' ? `chase:${cfg.seed}` : `stage:${cfg.id}`;
-    const comparison = score.total >= best ? 'New personal best!' : `Personal best: ${best}`;
+    const isBest = score.total >= best;
     this.store.submitLocalScore(boardId, { name: p.name, score: score.total, ticks: st.tick, me: true });
 
     this._boardContext = { boardId, friends: false };
-    const headline = completed
-      ? 'Session complete — Mote is thriving!'
-      : st.status === 'neglected'
-        ? 'Mote got overwhelmed — but nothing is lost. Try again!'
-        : 'Time is up — good effort!';
-    this.ui.renderResults({
-      headline,
+    const status = st.status, tick = st.tick;
+    // Results texts are rebuilt on a language change (see _relocalize).
+    this._results = () => ({
+      headline: t(completed
+        ? 'Session complete — Mote is thriving!'
+        : status === 'neglected'
+          ? 'Mote got overwhelmed — but nothing is lost. Try again!'
+          : 'Time is up — good effort!'),
       rows: [
-        ['Care', score.care], ['Discoveries', score.discovery],
-        ['Bond', score.bond], ['Time bonus', score.timeBonus],
-        ['Invalid actions', score.invalidAttempts],
-        ['Elapsed', `${st.tick} ticks`],
-        ...(stars ? [['Stars', '★'.repeat(stars)]] : []),
+        [t('Care'), score.care], [t('Discoveries'), score.discovery],
+        [t('Bond'), score.bond], [t('Time bonus'), score.timeBonus],
+        [t('Invalid actions'), score.invalidAttempts],
+        [t('Elapsed'), t('{n} ticks', { n: tick })],
+        ...(stars ? [[t('Stars'), '★'.repeat(stars)]] : []),
       ],
       total: score.total,
-      comparison,
-      achievements: newAchievements,
-      hasNext: this.mode === 'journey' && completed,
+      comparison: isBest ? t('New personal best!') : t('Personal best: {n}', { n: best }),
+      achievements: newAchievements.map((a) => t(a)),
+      hasNext,
     });
+    this.ui.renderResults(this._results());
     this.store.clearSessionSnapshot();
     this.ui.showScreen('results');
     this._postToLeaderboard(this.session.ranked ? Math.max(0, score.total) : null);
@@ -742,16 +799,26 @@ class Game {
   /** Signed in only: post a ranked session's total and show the board rank. */
   _postToLeaderboard(total) {
     const line = document.getElementById('results-lb');
+    this._lb = null;
     if (total == null || !this.platform.hosted) { line.hidden = true; return; }
-    const t = currentPlatformStrings();
-    line.hidden = false;
-    line.textContent = t.lbPosting;
     const session = this.session;
+    this._lb = { state: 'posting' };
+    this._refreshLeaderboardLine();
     this.platform.submitScore(total).then((r) => {
       if (this.session !== session) return;
-      line.textContent = !r.posted ? t.lbNotPosted
-        : r.rank ? t.lbRank.replace('{rank}', r.rank) : t.lbPosted;
+      this._lb = { state: !r.posted ? 'notPosted' : r.rank ? 'rank' : 'posted', rank: r.rank };
+      this._refreshLeaderboardLine();
     });
+  }
+
+  _refreshLeaderboardLine() {
+    const line = document.getElementById('results-lb');
+    const lb = this._lb;
+    if (!line || !lb) return;
+    const s = ps();
+    line.hidden = false;
+    line.textContent = lb.state === 'posting' ? s.lbPosting : lb.state === 'notPosted' ? s.lbNotPosted
+      : lb.state === 'rank' ? s.lbRank.replace('{rank}', lb.rank) : s.lbPosted;
   }
 
   async _loadBoard(friends) {
@@ -764,20 +831,20 @@ class Game {
     let entries, subtitle, title;
     if (this.platform.hosted) {
       // Global boards are platform-owned: read-only, nicknames resolved.
-      title = 'Leaderboard — global';
+      title = t('Leaderboard — global');
       try {
         entries = await this.platform.loadLeaderboard({ friends, pageSize: 20 });
       } catch { entries = null; /* fall through to the casual board */ }
-      subtitle = entries ? 'Platform board · read-only' : 'Casual local board';
+      subtitle = entries ? t('Platform board · read-only') : t('Casual local board');
       if (!entries) entries = this.store.getLocalBoard(boardId);
     } else {
-      title = 'Leaderboard — ' + boardId.split(':')[0];
+      title = t('Leaderboard — {board}', { board: t('board.' + boardId.split(':')[0]) });
       entries = this.store.getLocalBoard(boardId);
-      subtitle = 'Casual local board';
+      subtitle = t('Casual local board');
     }
     this.ui.renderBoard({
       title,
-      subtitle: subtitle + (friends ? ' · friends only' : ''),
+      subtitle: subtitle + (friends ? ' · ' + t('friends only') : ''),
       entries, friends,
     });
     this.ui.showScreen('board');
@@ -800,7 +867,7 @@ class Game {
     if ('_name' in patch) {
       if (this.platform.hosted) return; // the platform account name wins
       this.store.profile.name = patch._name || 'Guest';
-      document.getElementById('profile-chip').textContent = this.store.profile.name;
+      document.getElementById('profile-chip').textContent = this._displayName();
     } else {
       Object.assign(s, patch);
     }
@@ -835,11 +902,11 @@ class Game {
   _objectiveText(cfg) {
     const g = cfg.goals || {};
     const parts = [];
-    if (g.bondLevel) parts.push(`reach Bond level ${g.bondLevel}`);
-    if (g.care) parts.push(`earn ${g.care} care points`);
-    if (g.discoveries) parts.push(`make ${g.discoveries} discoveries`);
-    if (g.decor) parts.push(`place ${g.decor} decorations`);
-    return parts.length ? 'Objective: ' + parts.join(' and ') : 'Keep Mote happy';
+    if (g.bondLevel) parts.push(t('reach Bond level {n}', { n: g.bondLevel }));
+    if (g.care) parts.push(t('earn {n} care points', { n: g.care }));
+    if (g.discoveries) parts.push(t('make {n} discoveries', { n: g.discoveries }));
+    if (g.decor) parts.push(t('place {n} decorations', { n: g.decor }));
+    return parts.length ? t('Objective: {goals}', { goals: parts.join(t(' and ')) }) : t('Keep Mote happy');
   }
 
   _updateHUD() {
@@ -848,17 +915,17 @@ class Game {
     const score = this.session.score;
     const g = cfg.goals || {};
     const prog = [];
-    if (g.bondLevel) prog.push(`Bond ${this.session.bondLevel}/${g.bondLevel}`);
-    if (g.care) prog.push(`Care ${score.care}/${g.care}`);
-    if (g.discoveries) prog.push(`Found ${st.discovered.length}/${g.discoveries}`);
-    if (g.decor) prog.push(`Decor ${st.decorPlaced.length}/${g.decor}`);
+    if (g.bondLevel) prog.push(t('Bond {n}/{total}', { n: this.session.bondLevel, total: g.bondLevel }));
+    if (g.care) prog.push(t('Care {n}/{total}', { n: score.care, total: g.care }));
+    if (g.discoveries) prog.push(t('Found {n}/{total}', { n: st.discovered.length, total: g.discoveries }));
+    if (g.decor) prog.push(t('Decor {n}/{total}', { n: st.decorPlaced.length, total: g.decor }));
     const lvl = this.session.bondLevel;
     this.ui.updateHUD({
       objective: this._objectiveText(cfg),
-      objectiveProgress: prog.join(' · ') || `${st.tickLimit - st.tick} ticks left`,
+      objectiveProgress: prog.join(' · ') || t('{n} ticks left', { n: st.tickLimit - st.tick }),
       needs: st.needs,
       score: score.total,
-      scoreDetail: `care ${score.care} · discovery ${score.discovery} · bond ${score.bond} · bonus ${score.timeBonus}`,
+      scoreDetail: t('care {care} · discovery {discovery} · bond {bond} · bonus {bonus}', { care: score.care, discovery: score.discovery, bond: score.bond, bonus: score.timeBonus }),
       tick: st.tick, tickLimit: st.tickLimit,
       commandCount: st.commandCount, maxCommands: st.maxCommands,
       bondLevel: lvl,
@@ -874,7 +941,7 @@ class Game {
 const game = new Game();
 game.boot().catch((e) => {
   console.error('[boot] fatal', e);
-  document.getElementById('live-region').textContent = 'Failed to start: ' + e.message;
+  document.getElementById('live-region').textContent = t('Failed to start: {error}', { error: e.message });
 });
 
 // Results screen → leaderboard shortcut.

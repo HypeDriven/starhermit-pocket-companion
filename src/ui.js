@@ -9,6 +9,7 @@ import { ACTIONS, NEEDS, INVALID_REASONS, BOND_LEVELS } from './rules.js';
 import { DECOR_ITEMS } from './content.js';
 import { PRESETS, CATEGORIES, presetTier, resolve, choosePreset } from './gfx.js';
 import { gfxStrings, describeWords } from './gfx-i18n.js';
+import { t, getLocale, contentName } from './i18n.js';
 
 const NEED_LABELS = { hunger: 'Hunger', hygiene: 'Cleanliness', fun: 'Fun', energy: 'Energy' };
 const NEED_CRAVING_TEXT = {
@@ -54,10 +55,22 @@ export class UI {
     this._captionTimer = null;
     this._gamepadIndex = -1;
     this._gamepadPrev = {};
-    this.gt = gfxStrings(navigator.language);
     this._bindStatic();
     this._bindKeyboard();
     this._pollGamepad();
+  }
+
+  /** Settings-tab and Graphics strings in the game language. */
+  get gt() { return gfxStrings(getLocale()); }
+
+  /** Language change: labels set in code (static markup is re-applied by i18n.js). */
+  relabel() {
+    this.el('settings-tab-general').textContent = this.gt('tabGeneral');
+    this.el('settings-tab-graphics').textContent = this.gt('tabGraphics');
+    if (this._gfxChange) this.renderGraphics(this._gfx, this._gfxInfo, this._gfxChange);
+    if (this._settingsArgs) this.renderSettings(...this._settingsArgs);
+    if (this._trayActions) this.refreshActionTray(this._trayActions, true);
+    if (this._helpActions) this.renderHelp(this._helpActions);
   }
 
   /* ---------------- static bindings ---------------- */
@@ -133,7 +146,7 @@ export class UI {
     ov.classList.remove('hidden');
     const first = ov.querySelector('.btn-primary, button');
     if (first) first.focus();
-    this.announce(name + ' opened');
+    this.announce(t('overlay.' + name));
   }
 
   closeOverlay(name) {
@@ -200,6 +213,7 @@ export class UI {
     tray.innerHTML = '';
     this._actionButtons.clear();
     this._keymap.clear();
+    this._trayActions = actions;
     actions.forEach((a, i) => {
       const def = ACTIONS[a.id];
       const btn = document.createElement('button');
@@ -209,9 +223,9 @@ export class UI {
       const codes = this.bindings[`slot${i + 1}`] || [];
       const key = keyLabel(codes[0]);
       btn.innerHTML = `<span class="a-icon" aria-hidden="true">${ACTION_ICONS[a.id] || '•'}</span>` +
-        `<span class="a-label">${def ? def.label : a.id}</span>` +
+        `<span class="a-label">${def ? t(def.label) : a.id}</span>` +
         (key ? `<span class="a-key">${key}</span>` : '');
-      btn.setAttribute('aria-label', `${def ? def.label : a.id}${a.legal ? '' : ' — unavailable: ' + (INVALID_REASONS[a.reason] || '')}`);
+      btn.setAttribute('aria-label', actionAria(def, a));
       btn.addEventListener('click', () => {
         if (a.id === 'decorate') this.h.openDecor();
         else this.h.action(a.id);
@@ -226,13 +240,15 @@ export class UI {
     });
   }
 
-  refreshActionTray(actions) {
+  refreshActionTray(actions, relabel = false) {
+    this._trayActions = actions;
     for (const a of actions) {
       const btn = this._actionButtons.get(a.id);
       if (!btn) continue;
       btn.dataset.legal = String(a.legal);
       const def = ACTIONS[a.id];
-      btn.setAttribute('aria-label', `${def ? def.label : a.id}${a.legal ? '' : ' — unavailable: ' + (INVALID_REASONS[a.reason] || '')}`);
+      btn.setAttribute('aria-label', actionAria(def, a));
+      if (relabel) { const l = btn.querySelector('.a-label'); if (l) l.textContent = def ? t(def.label) : a.id; }
     }
   }
 
@@ -259,15 +275,15 @@ export class UI {
     }
     this.el('score-total').textContent = String(vm.score);
     this.el('score-detail').textContent = vm.scoreDetail;
-    this.el('bond-level').textContent = 'Lv ' + vm.bondLevel;
-    this.el('bond-progress').textContent = vm.bondNext != null ? `next at ${vm.bondNext}` : 'max';
+    this.el('bond-level').textContent = t('Lv {n}', { n: vm.bondLevel });
+    this.el('bond-progress').textContent = vm.bondNext != null ? t('next at {n}', { n: vm.bondNext }) : t('max');
     this.el('tick-display').textContent = vm.tickLimit
-      ? `Tick ${vm.tick} / ${vm.tickLimit}` : `Tick ${vm.tick}`;
+      ? t('Tick {n} / {total}', { n: vm.tick, total: vm.tickLimit }) : t('Tick {n}', { n: vm.tick });
     this.el('moves-display').textContent = vm.maxCommands
-      ? `Moves ${vm.commandCount} / ${vm.maxCommands}` : '';
+      ? t('Moves {n} / {total}', { n: vm.commandCount, total: vm.maxCommands }) : '';
     const bubble = this.el('craving-bubble');
     if (vm.craving) {
-      bubble.textContent = NEED_CRAVING_TEXT[vm.craving.need] || 'wishes…';
+      bubble.textContent = t(NEED_CRAVING_TEXT[vm.craving.need] || 'wishes…');
       bubble.classList.remove('hidden');
     } else {
       bubble.classList.add('hidden');
@@ -286,11 +302,11 @@ export class UI {
 
   setCompatMessage(show) { this.el('compat-message').classList.toggle('hidden', !show); }
 
-  showLessonBanner(html) {
+  showLessonBanner(html, quiet = false) {
     const b = this.el('lesson-banner');
     b.innerHTML = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     b.classList.remove('hidden');
-    this.announce(b.textContent);
+    if (!quiet) this.announce(b.textContent);
   }
   hideLessonBanner() { this.el('lesson-banner').classList.add('hidden'); }
 
@@ -300,10 +316,10 @@ export class UI {
     this.el('setup-heading').textContent = vm.name;
     this.el('setup-summary').innerHTML =
       `<p>${vm.intro}</p><dl>` +
-      `<dt>Rules</dt><dd>${vm.rules}</dd>` +
-      `<dt>Expected length</dt><dd>${vm.duration}</dd>` +
-      `<dt>Players</dt><dd>1</dd>` +
-      `<dt>Result</dt><dd><span class="ranked-badge ${vm.ranked ? 'ranked' : 'casual'}">${vm.rankedLabel}</span></dd>` +
+      `<dt>${t('Rules')}</dt><dd>${vm.rules}</dd>` +
+      `<dt>${t('Expected length')}</dt><dd>${vm.duration}</dd>` +
+      `<dt>${t('Players')}</dt><dd>1</dd>` +
+      `<dt>${t('Result')}</dt><dd><span class="ranked-badge ${vm.ranked ? 'ranked' : 'casual'}">${vm.rankedLabel}</span></dd>` +
       `</dl>`;
     this.el('setup-options').innerHTML = vm.optionsHTML || '';
   }
@@ -320,7 +336,7 @@ export class UI {
     }
     const tr = document.createElement('tr');
     tr.className = 'total';
-    tr.innerHTML = `<td>Total</td><td>${vm.total}</td>`;
+    tr.innerHTML = `<td>${t('Total')}</td><td>${vm.total}</td>`;
     tbody.appendChild(tr);
     this.el('results-comparison').textContent = vm.comparison || '';
     const ach = this.el('results-achievements');
@@ -332,7 +348,7 @@ export class UI {
       ach.appendChild(chip);
     }
     this.el('btn-next').style.display = vm.hasNext ? '' : 'none';
-    this.announce(`Session over. ${vm.headline}. Total score ${vm.total}.`, true);
+    if (!vm.quiet) this.announce(t('Session over. {headline}. Total score {total}.', { headline: vm.headline, total: vm.total }), true);
   }
 
   /* ---------------- journey / learn / profile / boards ---------------- */
@@ -345,7 +361,7 @@ export class UI {
         chapter = s.chapter;
         const h = document.createElement('div');
         h.className = 'chapter-label';
-        h.textContent = `Chapter ${chapter}`;
+        h.textContent = t('Chapter {n}', { n: chapter });
         grid.appendChild(h);
       }
       const p = progress[s.id];
@@ -355,14 +371,14 @@ export class UI {
       btn.setAttribute('role', 'listitem');
       btn.disabled = !unlocked;
       const stars = p ? '★'.repeat(p.stars) + '☆'.repeat(3 - p.stars) : '';
-      btn.innerHTML = `<strong>${s.index}. ${s.name}</strong>` +
-        `<span>${s.mastery ? 'Mastery trial' : s.teaches.length ? 'New: ' + s.teaches.join(', ') : 'Stage'}</span>` +
-        (p ? `<span class="stars" aria-label="${p.stars} of 3 stars">${stars}</span>` : '');
+      btn.innerHTML = `<strong>${s.index}. ${t(s.name)}</strong>` +
+        `<span>${s.mastery ? t('Mastery trial') : s.teaches.length ? t('New: {list}', { list: s.teaches.map(teachName).join(', ') }) : t('Stage')}</span>` +
+        (p ? `<span class="stars" aria-label="${t('{n} of 3 stars', { n: p.stars })}">${stars}</span>` : '');
       btn.addEventListener('click', () => this.h.stageStart(s.id));
       grid.appendChild(btn);
     });
     const done = Object.keys(progress).length;
-    this.el('journey-status').textContent = `${done} / ${stages.length} stages`;
+    this.el('journey-status').textContent = t('{done} / {total} stages', { done, total: stages.length });
   }
 
   renderLessons(lessons, done) {
@@ -372,7 +388,7 @@ export class UI {
       const btn = document.createElement('button');
       btn.className = 'card' + (done[l.id] ? ' done' : '');
       btn.setAttribute('role', 'listitem');
-      btn.innerHTML = `<strong>${l.title}</strong><span>${done[l.id] ? 'Completed — replay any time' : 'Not yet completed'}</span>`;
+      btn.innerHTML = `<strong>${t(l.title)}</strong><span>${done[l.id] ? t('Completed — replay any time') : t('Not yet completed')}</span>`;
       btn.addEventListener('click', () => this.h.lessonStart(l.id));
       list.appendChild(btn);
     });
@@ -381,15 +397,15 @@ export class UI {
   renderProfile(vm) {
     const body = this.el('profile-body');
     const achList = vm.achievements.map((a) =>
-      `<div class="card ${a.unlocked ? 'unlocked' : ''}"><strong>${a.unlocked ? '🏅' : '🔒'} ${a.name}</strong><span>${a.desc}</span></div>`).join('');
+      `<div class="card ${a.unlocked ? 'unlocked' : ''}"><strong>${a.unlocked ? '🏅' : '🔒'} ${t(a.name)}</strong><span>${t(a.desc)}</span></div>`).join('');
     body.innerHTML =
       `<div class="stat-grid">
-        <div class="stat"><strong>${vm.sessionsPlayed}</strong>sessions played</div>
-        <div class="stat"><strong>${vm.stagesDone}</strong>journey stages</div>
-        <div class="stat"><strong>${vm.discoveries}</strong>interactions discovered</div>
-        <div class="stat"><strong>${vm.dailies}</strong>daily challenges</div>
+        <div class="stat"><strong>${vm.sessionsPlayed}</strong>${t('sessions played')}</div>
+        <div class="stat"><strong>${vm.stagesDone}</strong>${t('journey stages')}</div>
+        <div class="stat"><strong>${vm.discoveries}</strong>${t('interactions discovered')}</div>
+        <div class="stat"><strong>${vm.dailies}</strong>${t('daily challenges')}</div>
       </div>
-      <h3>Achievements</h3>
+      <h3>${t('Achievements')}</h3>
       <div class="achievement-list">${achList}</div>`;
   }
 
@@ -401,13 +417,13 @@ export class UI {
     const list = this.el('board-list');
     list.innerHTML = '';
     if (!vm.entries.length) {
-      list.innerHTML = '<li>No scores yet — be the first!</li>';
+      list.innerHTML = `<li>${t('No scores yet — be the first!')}</li>`;
       return;
     }
     vm.entries.forEach((e, i) => {
       const li = document.createElement('li');
       if (e.me) li.className = 'me';
-      li.innerHTML = `<span>${i + 1}. ${e.name}</span><span>${e.score} pts · ${e.ticks} ticks</span>`;
+      li.innerHTML = `<span>${i + 1}. ${e.name}</span><span>${t('{score} pts · {ticks} ticks', { score: e.score, ticks: e.ticks })}</span>`;
       list.appendChild(li);
     });
   }
@@ -422,7 +438,7 @@ export class UI {
       const isPlaced = placed.includes(id);
       const btn = document.createElement('button');
       btn.className = 'card decor-item' + (isPlaced ? ' placed' : '');
-      btn.innerHTML = `<strong>${item.name}</strong><span>${isPlaced ? 'Placed ✓' : 'Tap to place'}</span>`;
+      btn.innerHTML = `<strong>${t(item.name)}</strong><span>${isPlaced ? t('Placed ✓') : t('Tap to place')}</span>`;
       btn.disabled = isPlaced;
       btn.addEventListener('click', () => this.h.decorate(id));
       list.appendChild(btn);
@@ -431,55 +447,56 @@ export class UI {
 
   /* ---------------- help (generated from current mappings) ---------------- */
   renderHelp(actions) {
+    this._helpActions = actions;
     const cards = actions.map((a, i) => {
       const def = ACTIONS[a.id];
       if (!def) return '';
       const key = this._keys(`slot${i + 1}`)[0] || '';
-      return `<div class="card"><strong>${ACTION_ICONS[a.id] || ''} ${def.label}${key ? ` <kbd>${key}</kbd>` : ''}</strong>` +
-        `<span>${def.blurb} Costs ${def.ticks} tick${def.ticks === 1 ? '' : 's'}.</span></div>`;
+      return `<div class="card"><strong>${ACTION_ICONS[a.id] || ''} ${t(def.label)}${key ? ` <kbd>${key}</kbd>` : ''}</strong>` +
+        `<span>${t(def.blurb)} ${t(def.ticks === 1 ? 'Costs {n} tick.' : 'Costs {n} ticks.', { n: def.ticks })}</span></div>`;
     }).join('');
+    const kbd = (action) => `<kbd>${this._keys(action).join(' / ')}</kbd>`;
     this.el('help-body').innerHTML =
-      `<p>Care for Mote by reading its four needs — Hunger, Cleanliness, Fun, Energy — and choosing an action.
-       Every action advances the clock and all needs slowly drain. Fulfil the objective before time runs out.
-       Thought bubbles are <em>cravings</em>: grant them for bonus Trust. Neglect never causes permanent loss. Tap Mote to pet it.</p>
-       <p><strong>Keyboard:</strong> number keys act · <kbd>${this._keys('hint').join(' / ')}</kbd> hint · <kbd>${this._keys('undo').join(' / ')}</kbd> undo (practice) ·
-       <kbd>${this._keys('camera').join(' / ')}</kbd> camera · <kbd>${this._keys('pause').join(' / ')}</kbd> pause · arrow keys move between buttons.</p>
-       <p><strong>Gamepad:</strong> D-pad moves focus · <kbd>A</kbd> confirm · <kbd>B</kbd> cancel · <kbd>Start</kbd> pause.</p>
+      `<p>${t('help.intro')}</p>
+       <p>${t('help.keyboard', { hint: kbd('hint'), undo: kbd('undo'), camera: kbd('camera'), pause: kbd('pause') })}</p>
+       <p>${t('help.gamepad')}</p>
        <div class="achievement-list">${cards}</div>`;
   }
 
   /* ---------------- settings ---------------- */
   renderSettings(settings, onChange) {
+    this._settingsArgs = [settings, onChange];
     const body = this.el('settings-body');
     body.innerHTML = '';
     const row = (label, control, hint = '') => {
       const div = document.createElement('div');
       div.className = 'setting-row';
-      div.innerHTML = `<label>${label}</label>`;
+      const lab = document.createElement('label'); lab.textContent = t(label);
+      div.appendChild(lab);
       div.appendChild(control);
-      if (hint) { const h = document.createElement('p'); h.className = 'hint'; h.textContent = hint; div.appendChild(h); }
+      if (hint) { const h = document.createElement('p'); h.className = 'hint'; h.textContent = t(hint); div.appendChild(h); }
       body.appendChild(div);
     };
     const slider = (key, label) => {
       const input = document.createElement('input');
       input.type = 'range'; input.min = 0; input.max = 1; input.step = 0.05; input.value = settings[key];
-      input.setAttribute('aria-label', label);
+      input.setAttribute('aria-label', t(label));
       input.addEventListener('input', () => onChange({ [key]: Number(input.value) }));
       row(label, input);
     };
     const toggle = (key, label, hint = '') => {
       const input = document.createElement('input');
       input.type = 'checkbox'; input.checked = !!settings[key];
-      input.setAttribute('aria-label', label);
+      input.setAttribute('aria-label', t(label));
       input.addEventListener('change', () => onChange({ [key]: input.checked }));
       row(label, input, hint);
     };
     const select = (key, label, options, hint = '') => {
       const sel = document.createElement('select');
-      sel.setAttribute('aria-label', label);
+      sel.setAttribute('aria-label', t(label));
       for (const [v, text] of options) {
         const o = document.createElement('option');
-        o.value = v; o.textContent = text;
+        o.value = v; o.textContent = t(text);
         if (settings[key] === v) o.selected = true;
         sel.appendChild(o);
       }
@@ -502,7 +519,7 @@ export class UI {
     const nameInput = document.createElement('input');
     nameInput.type = 'text'; nameInput.maxLength = 24; nameInput.value = settings._name || '';
     if (settings._hosted) nameInput.disabled = true;
-    nameInput.setAttribute('aria-label', 'Display name');
+    nameInput.setAttribute('aria-label', t('Display name'));
     nameInput.addEventListener('change', () => onChange({ _name: nameInput.value.slice(0, 24) }));
     row('Display name', nameInput, settings._hosted ? 'Signed in — the platform account name is shown.' : '');
   }
@@ -530,7 +547,17 @@ export class UI {
     this._gfxInfo = infoFn;
     this._gfxChange = onChange;
     const t = this.gt;
-    const body = this.el('gfx-section');
+    // Own inner box: a rebuild (preset change, language change) replaces only
+    // these rows; the shared Sound / Language / Report sections (game-options.js)
+    // are mounted after it in #gfx-section and stay in place.
+    const section = this.el('gfx-section');
+    let body = this.el('gfx-own');
+    if (!body) {
+      body = document.createElement('div');
+      body.id = 'gfx-own';
+      body.style.display = 'contents';
+      section.prepend(body);
+    }
     const info = infoFn() || null;
     const detected = info?.detected || 'low';
     const r = resolve(this._gfx, detected);
@@ -716,6 +743,17 @@ export class UI {
     else next = cur < 0 ? focusables.length - 1 : (cur - 1 + focusables.length) % focusables.length;
     focusables[next].focus();
   }
+}
+
+// Accessible tray label: the action, plus why it is unavailable.
+function actionAria(def, a) {
+  const label = def ? t(def.label) : a.id;
+  return a.legal ? label : t('{action} — unavailable: {reason}', { action: label, reason: INVALID_REASONS[a.reason] ? t(INVALID_REASONS[a.reason]) : '' });
+}
+
+// Journey "New: …" tags: action labels, plus the craving mechanic.
+function teachName(id) {
+  return ACTIONS[id] ? t(ACTIONS[id].label) : t('teach.' + id);
 }
 
 export { NEED_LABELS, ACTION_ICONS, BOND_LEVELS };
