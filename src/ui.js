@@ -668,7 +668,8 @@ export class UI {
       return;
     }
     const fps = info.resolved?.showFps && info.fps ? ` · ${info.fps} fps` : '';
-    summary.textContent = `${info.gpu || this.gt('unknownGpu')} · ${info.summary}${fps}`;
+    const level = info.level != null ? ` · ${this.gt('level', { n: info.level })}` : '';
+    summary.textContent = `${info.gpu || this.gt('unknownGpu')}${level} · ${info.summary}${fps}`;
     summary.dataset.gfxPreset = info.resolved.preset;
     note.textContent = info.postFailed ? this.gt('postUnavailable') : '';
     note.classList.toggle('hidden', !info.postFailed);

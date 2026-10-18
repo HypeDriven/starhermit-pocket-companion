@@ -16,7 +16,72 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeRng } from './rules.js';
 import { THEMES, DECOR_ITEMS } from './content.js';
-import { detectPreset, resolve, describe, SHADOW_MAP, PARTICLE_BUDGET } from './gfx.js';
+import { detectLevel, presetForLevel, resolve, describe, spriteCap, SHADOW_MAP, SPRITE_MAX, MOTE_MAX } from './gfx.js';
+
+// Run a post pass at a fraction of the frame: EffectComposer.addPass/setSize hand every pass the full
+// frame size, so the pass's own setSize applies the budget's scale (half-res bloom/GTAO below Ultra).
+function atScale(pass, k) {
+  if (!(k < 1)) return pass;
+  const setSize = pass.setSize.bind(pass);
+  pass.setSize = (w, h) => setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+  return pass;
+}
+
+// Procedural canvas textures are authored at a fixed size and drawn at the preset's texScale.
+let TEX_SCALE = 1;
+
+// Sprite atlas order for the instanced emote particles.
+const SPRITE_KINDS = ['heart', 'bubble', 'note', 'crumb', 'zzz', 'star', 'sparkle'];
+
+/**
+ * Merge a group's static, untextured, non-emissive meshes that share a shading signature into one mesh
+ * each (colours baked into vertex colours), so props cost one draw call per signature in every pass
+ * (main, shadow, ambient occlusion). Looks identical; animated, textured or glowing meshes are left alone.
+ */
+function mergeStatic(root) {
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const buckets = new Map();
+  root.traverse((o) => {
+    const m = o.material;
+    if (!o.isMesh || Array.isArray(m) || m.map || m.transparent || m.isMeshBasicMaterial || o.userData.keep) return;
+    if (m.emissive && m.emissive.getHex() !== 0) return;
+    const key = [m.type, m.roughness, m.metalness, m.side, m.envMapIntensity, o.castShadow, o.receiveShadow].join('|');
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(o);
+  });
+  for (const list of buckets.values()) {
+    if (list.length < 2) continue;
+    const parts = list.map((o) => {
+      const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+      return { g, color: o.material.color };
+    });
+    const n = parts.reduce((a, p) => a + p.g.attributes.position.count, 0);
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
+    let off = 0;
+    for (const { g, color } of parts) {
+      const c = g.attributes.position.count;
+      pos.set(g.attributes.position.array, off * 3);
+      nor.set(g.attributes.normal.array, off * 3);
+      for (let i = 0; i < c; i++) { col[(off + i) * 3] = color.r; col[(off + i) * 3 + 1] = color.g; col[(off + i) * 3 + 2] = color.b; }
+      off += c;
+      g.dispose();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const mat = list[0].material.clone();
+    mat.color.set(0xffffff);
+    mat.vertexColors = true;
+    const merged = new THREE.Mesh(geo, mat);
+    merged.castShadow = list[0].castShadow;
+    merged.receiveShadow = list[0].receiveShadow;
+    root.add(merged);
+    for (const o of list) { o.parent.remove(o); o.geometry.dispose(); o.material.dispose(); }
+  }
+}
 
 /* Camera framing constants (no magic offsets). */
 const CAM = {
@@ -107,7 +172,17 @@ export class Renderer3D {
     }
     this.gpu = readGpu(this.renderer.getContext());
     const mobile = (window.matchMedia?.('(pointer: coarse)').matches) || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    this.detected = detectPreset(this.gpu, { mobile });
+    // StarHermit hardware level (gpu-level.js): renderer string + device facts (phone/tablet, cores, memory).
+    let sys = { mobile, webgl2: this.renderer.capabilities.isWebGL2 };
+    try {
+      const G = globalThis.StarHermitGpu;
+      if (G) { const d = G.detectSystem(); sys = { ...d, mobile: mobile || d.mobile }; }
+    } catch { /* defaults */ }
+    this.gpuLevel = detectLevel(this.gpu, sys);
+    this.detected = presetForLevel(this.gpuLevel);
+    // Build the room and creature with the saved preset's assets from the start.
+    this.q = resolve(savedGfx, this.detected, this.gpuLevel);
+    TEX_SCALE = this.q.budget.texScale;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -180,7 +255,20 @@ export class Renderer3D {
 
   /* ---------------- room ---------------- */
   _mat(color, rough = 0.9, metal = 0) {
+    if (this.q.budget.material === 'lambert') return new THREE.MeshLambertMaterial({ color });
     return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, envMapIntensity: metal > 0.3 ? ENV.glossy : ENV.base });
+  }
+
+  /** Clear-coat / sheen surface for the preset's budget: Physical on High/Ultra, Standard on Balanced, Lambert on Low. */
+  _surf(params) {
+    const tier = this.q.budget.material;
+    if (tier === 'physical') return new THREE.MeshPhysicalMaterial(params);
+    const { clearcoat, clearcoatRoughness, sheen, sheenRoughness, sheenColor, ...rest } = params;
+    void clearcoat; void clearcoatRoughness; void sheen; void sheenRoughness; void sheenColor;
+    if (tier === 'standard') return new THREE.MeshStandardMaterial(rest);
+    const { roughness, metalness, envMapIntensity, ...lam } = rest;
+    void roughness; void metalness; void envMapIntensity;
+    return new THREE.MeshLambertMaterial(lam);
   }
 
   /** Register a procedural surface map that only the "detailed" tier shows. */
@@ -202,7 +290,8 @@ export class Renderer3D {
     const seed = this.decorSeed;
 
     // Floor: varnished planks with per-board tone, grain and seams.
-    const floorMat = new THREE.MeshPhysicalMaterial({
+    TEX_SCALE = this.q.budget.texScale;
+    const floorMat = this._surf({
       map: makeFloorTexture(p.floor, seed), roughness: 0.72, clearcoat: 0.25, clearcoatRoughness: 0.45, envMapIntensity: ENV.base,
     });
     const floor = new THREE.Mesh(new THREE.CylinderGeometry(6.4, 6.4, 0.2, 64), floorMat);
@@ -257,6 +346,7 @@ export class Renderer3D {
     const sill = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.07, 0.26), frameMat);
     sill.position.set(0, -0.88, 0.1);
     win.add(sill);
+    mergeStatic(win);
     win.position.set(0, 2.5, -5.9);
     g.add(win);
     this._anchors.window = win;
@@ -278,6 +368,7 @@ export class Renderer3D {
     // Static props per theme (low-poly authored shapes).
     this._propGroup = new THREE.Group();
     this._addProps(this._propGroup, theme);
+    mergeStatic(this._propGroup);
     g.add(this._propGroup);
 
     // Decor item anchors (filled by setDecor).
@@ -310,7 +401,7 @@ export class Renderer3D {
     pool.layers.set(2);
     grp.add(pool);
     // Dust motes drifting in the window light.
-    const n = 70;
+    const n = MOTE_MAX; // built at the largest budget; the preset draws budget.motes of them
     const rng = makeRng(this.decorSeed ^ 0xd057);
     const pos = new Float32Array(n * 3);
     this._moteSeeds = new Float32Array(n * 4);
@@ -322,6 +413,7 @@ export class Renderer3D {
     }
     const mg = new THREE.BufferGeometry();
     mg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    mg.setDrawRange(0, Math.min(n, this.q.budget.motes));
     const motes = new THREE.Points(mg, new THREE.PointsMaterial({
       color: beam, map: makeRadialTexture(), size: 0.028, transparent: true, opacity: 0.5,
       blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
@@ -357,7 +449,7 @@ export class Renderer3D {
     put(lampG, -2.6, -1.6);
     // Plant.
     const plantG = new THREE.Group();
-    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.3, 16), new THREE.MeshPhysicalMaterial({ color: 0xa3603f, roughness: 0.5, clearcoat: 0.6, clearcoatRoughness: 0.3, envMapIntensity: ENV.base }));
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.3, 16), this._surf({ color: 0xa3603f, roughness: 0.5, clearcoat: 0.6, clearcoatRoughness: 0.3, envMapIntensity: ENV.base }));
     pot.position.y = 0.15;
     plantG.add(pot);
     for (let i = 0; i < 5; i++) {
@@ -383,7 +475,7 @@ export class Renderer3D {
     shelfG.rotation.y = 0.5;
     group.add(shelfG);
     // Cushion.
-    const cushion = new THREE.Mesh(new THREE.SphereGeometry(0.42, 24, 16), new THREE.MeshPhysicalMaterial({ color: p.rug, roughness: 0.9, sheen: 1, sheenRoughness: 0.6, sheenColor: 0xffe8d8, envMapIntensity: ENV.base }));
+    const cushion = new THREE.Mesh(new THREE.SphereGeometry(0.42, 24, 16), this._surf({ color: p.rug, roughness: 0.9, sheen: 1, sheenRoughness: 0.6, sheenColor: 0xffe8d8, envMapIntensity: ENV.base }));
     cushion.receiveShadow = true;
     cushion.scale.set(1, 0.45, 1);
     cushion.position.set(1.9, 0.2, 0.8);
@@ -405,19 +497,20 @@ export class Renderer3D {
     c.name = 'mote';
 
     // Plush body: sheen gives the soft velvet rim; the mood colour stays the base.
-    this.bodyMat = new THREE.MeshPhysicalMaterial({
+    this.bodyMat = this._surf({
       color: MOOD_COLORS.content, roughness: 0.78, emissive: 0x000000,
       sheen: 0.7, sheenRoughness: 0.5, sheenColor: 0xffe6c8, envMapIntensity: ENV.base,
     });
     this.bodyMat.userData.sheen = this.bodyMat.sheen;
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.62, 40, 30), this.bodyMat);
+    this._bodySegs = this.q.budget.body.join('x');
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.62, this.q.budget.body[0], this.q.budget.body[1]), this.bodyMat);
     body.scale.set(1, 0.92, 0.95);
     body.position.y = 0.62;
     body.castShadow = true;
     c.add(body);
     this._body = body;
 
-    this._bellyMat = new THREE.MeshPhysicalMaterial({ color: 0xfff3e0, roughness: 0.9, sheen: 0.6, sheenRoughness: 0.6, sheenColor: 0xfff4e6, envMapIntensity: ENV.base });
+    this._bellyMat = this._surf({ color: 0xfff3e0, roughness: 0.9, sheen: 0.6, sheenRoughness: 0.6, sheenColor: 0xfff4e6, envMapIntensity: ENV.base });
     this._bellyMat.userData.sheen = this._bellyMat.sheen;
     const belly = new THREE.Mesh(new THREE.SphereGeometry(0.4, 28, 18), this._bellyMat);
     belly.scale.set(0.85, 0.72, 0.5);
@@ -440,8 +533,8 @@ export class Renderer3D {
     for (const side of [-1, 1]) {
       const eye = new THREE.Group();
       // Glossy eyes (clearcoat) with a catchlight so Mote reads as alive in every tier.
-      const white = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 16), new THREE.MeshPhysicalMaterial({ color: 0xe9e4de, roughness: 0.45, clearcoat: 1, clearcoatRoughness: 0.12, envMapIntensity: ENV.glossy }));
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), new THREE.MeshPhysicalMaterial({ color: 0x2a2430, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: ENV.glossy }));
+      const white = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 16), this._surf({ color: 0xe9e4de, roughness: 0.45, clearcoat: 1, clearcoatRoughness: 0.12, envMapIntensity: ENV.glossy }));
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), this._surf({ color: 0x2a2430, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: ENV.glossy }));
       pupil.position.z = 0.075;
       const glint = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
       glint.position.set(-0.022, 0.026, 0.118);
@@ -505,43 +598,84 @@ export class Renderer3D {
   }
 
   /* ---------------- pooled particles ---------------- */
+  // All emote particles draw as one instanced billboard mesh (a 7-sprite atlas) instead of one sprite
+  // each, so a burst costs a single draw call on every preset.
   _buildParticles() {
-    this._particleGroup = new THREE.Group();
-    this._particleGroup.layers.set(2);
-    this.scene.add(this._particleGroup);
-    this._sprites = {
-      heart: makeSpriteTexture('heart'), bubble: makeSpriteTexture('bubble'),
-      note: makeSpriteTexture('note'), crumb: makeSpriteTexture('crumb'),
-      zzz: makeSpriteTexture('zzz'), star: makeSpriteTexture('star'),
-      sparkle: makeSpriteTexture('sparkle'),
-    };
-    this._pool = [];
+    const atlas = makeSpriteAtlas();
+    const quad = new THREE.PlaneGeometry(1, 1);
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = quad.index;
+    geo.setAttribute('position', quad.attributes.position);
+    geo.setAttribute('uv', quad.attributes.uv);
+    this._pPos = new THREE.InstancedBufferAttribute(new Float32Array(SPRITE_MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    this._pData = new THREE.InstancedBufferAttribute(new Float32Array(SPRITE_MAX * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('iPos', this._pPos);
+    geo.setAttribute('iData', this._pData);
+    geo.instanceCount = 0;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: atlas } },
+      transparent: true, depthWrite: false,
+      vertexShader: `
+        attribute vec3 iPos; attribute vec4 iData; // scale, rotation, opacity, atlas cell
+        varying vec2 vUv; varying float vOpacity;
+        void main() {
+          float c = cos(iData.y), s = sin(iData.y);
+          vec2 p = position.xy * iData.x;
+          vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
+          mv.xy += vec2(c * p.x - s * p.y, s * p.x + c * p.y);
+          gl_Position = projectionMatrix * mv;
+          vUv = vec2((uv.x + iData.w) / ${SPRITE_KINDS.length}.0, uv.y);
+          vOpacity = iData.z;
+        }`,
+      fragmentShader: `
+        uniform sampler2D map; varying vec2 vUv; varying float vOpacity;
+        void main() {
+          vec4 t = texture2D(map, vUv);
+          gl_FragColor = vec4(t.rgb, t.a * vOpacity);
+          if (gl_FragColor.a < 0.004) discard;
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    });
+    this._particleMesh = new THREE.Mesh(geo, mat);
+    this._particleMesh.frustumCulled = false;
+    this._particleMesh.layers.set(2);
+    this._particleMesh.raycast = () => {};
+    this.scene.add(this._particleMesh);
   }
 
   burst(kind, count = 8) {
     if (this.reducedMotion) count = Math.min(2, count);
-    const budget = PARTICLE_BUDGET[this.q.particles] - this._particles.length;
+    const budget = spriteCap(this.q) - this._particles.length;
     const n = Math.max(0, Math.min(count, budget));
+    const k = SPRITE_KINDS.indexOf(kind), cell = k >= 0 ? k : SPRITE_KINDS.length - 1; // unknown kinds: sparkle
     for (let i = 0; i < n; i++) {
-      let s = this._pool.pop();
-      if (!s) {
-        s = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
-        s.layers.set(2);
-        this._particleGroup.add(s);
-      }
-      s.material.map = this._sprites[kind] || this._sprites.sparkle;
-      s.material.opacity = 1;
-      s.material.rotation = Math.random() * 0.6 - 0.3;
-      const scale = 0.18 + Math.random() * 0.14;
-      s.scale.set(scale, scale, 1);
-      s.position.set((Math.random() - 0.5) * 0.8, 0.9 + Math.random() * 0.5, 0.5 + Math.random() * 0.2);
-      s.visible = true;
       this._particles.push({
-        sprite: s, life: 0,
+        x: (Math.random() - 0.5) * 0.8, y: 0.9 + Math.random() * 0.5, z: 0.5 + Math.random() * 0.2,
+        rot: Math.random() * 0.6 - 0.3, scale: 0.18 + Math.random() * 0.14, cell, life: 0,
         maxLife: this.reducedMotion ? 0.5 : 1.1 + Math.random() * 0.5,
         vx: (Math.random() - 0.5) * 0.5, vy: 0.8 + Math.random() * 0.6, vz: (Math.random() - 0.5) * 0.2,
       });
     }
+  }
+
+  _stepParticles(dt) {
+    let n = 0;
+    const pos = this._pPos.array, data = this._pData.array;
+    for (let i = this._particles.length - 1; i >= 0; i--) {
+      const p = this._particles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife) { this._particles.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    }
+    for (const p of this._particles) {
+      if (n >= SPRITE_MAX) break;
+      pos[n * 3] = p.x; pos[n * 3 + 1] = p.y; pos[n * 3 + 2] = p.z;
+      data[n * 4] = p.scale; data[n * 4 + 1] = p.rot; data[n * 4 + 2] = 1 - p.life / p.maxLife; data[n * 4 + 3] = p.cell;
+      n++;
+    }
+    this._particleMesh.geometry.instanceCount = n;
+    if (n) { this._pPos.needsUpdate = true; this._pData.needsUpdate = true; }
   }
 
   /* ---------------- public API ---------------- */
@@ -613,7 +747,8 @@ export class Renderer3D {
   setGraphics(saved) {
     this.saved = saved || {};
     const prev = this.q;
-    this.q = resolve(this.saved, this.detected);
+    this.q = resolve(this.saved, this.detected, this.gpuLevel);
+    this._applyBudget(prev);
     this.adaptiveScale = 1;
     this._frames = [];
     this.postKey = null; // rebuild the post chain on the next frame
@@ -622,6 +757,21 @@ export class Renderer3D {
     this._fpsVisible(this.q.showFps);
     document.body.dataset.gfxPreset = this.q.preset;
     this.renderer.domElement.dataset.gfxPreset = this.q.preset;
+  }
+
+  /** Asset variants for the preset's budget: shading model, texture scale, body segments, mote count. */
+  _applyBudget(prev) {
+    const b = this.q.budget, pb = prev?.budget;
+    if (!pb || !this.scene) return;
+    if (pb.material !== b.material || pb.texScale !== b.texScale) {
+      this._buildRoom(this.theme?.id || 'hearthwood');
+      if (pb.material !== b.material) this._buildCreature();
+    } else if (this._motes) this._motes.geometry.setDrawRange(0, Math.min(MOTE_MAX, b.motes));
+    if (this._body && this._bodySegs !== b.body.join('x')) {
+      this._bodySegs = b.body.join('x');
+      this._body.geometry.dispose();
+      this._body.geometry = new THREE.SphereGeometry(0.62, b.body[0], b.body[1]);
+    }
   }
 
   /** Push the resolved tiers into lights, materials and effect groups. */
@@ -662,6 +812,7 @@ export class Renderer3D {
     const px = [Math.round(this.size[0] * this.pixelRatio), Math.round(this.size[1] * this.pixelRatio)];
     return {
       gpu: this.gpu,
+      level: this.gpuLevel,
       detected: this.detected,
       resolved: this.q,
       pixels: px,
@@ -712,11 +863,11 @@ export class Renderer3D {
         ao.blendIntensity = 0.85;
         ao.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.4, thickness: 1.0, scale: 1.0, samples: g.ao === 'high' ? 16 : 8 });
         ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: g.ao === 'high' ? 6 : 4, rings: 2, samples: g.ao === 'high' ? 16 : 8 });
-        composer.addPass(ao);
+        composer.addPass(atScale(ao, g.budget.aoRes));
       }
       if (g.bloom === 'on') {
         // High threshold: only the lamp bulb, window, eye glints and sparkles bloom.
-        composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.42, 0.45, 0.92));
+        composer.addPass(atScale(new UnrealBloomPass(new THREE.Vector2(w, h), 0.42, 0.45, 0.92), g.budget.bloomRes));
       }
       if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
       composer.addPass(new OutputPass());
@@ -888,20 +1039,7 @@ export class Renderer3D {
     this.camera.lookAt(CAM.look);
     this._updateAmbient(dt);
     // Particles.
-    for (let i = this._particles.length - 1; i >= 0; i--) {
-      const p = this._particles[i];
-      p.life += dt;
-      if (p.life >= p.maxLife) {
-        p.sprite.visible = false;
-        this._particles.splice(i, 1);
-        this._pool.push(p.sprite);
-        continue;
-      }
-      p.sprite.position.x += p.vx * dt;
-      p.sprite.position.y += p.vy * dt;
-      p.sprite.position.z += p.vz * dt;
-      p.sprite.material.opacity = 1 - p.life / p.maxLife;
-    }
+    this._stepParticles(dt);
   }
 
   /** Window glow shimmer, lamp flicker and drifting motes; still under reduced motion. */
@@ -960,8 +1098,10 @@ function disposeChildren(group) {
 
 function canvasTex(size, draw, { srgb = true, repeat = null } = {}) {
   const c = document.createElement('canvas');
-  c.width = size[0]; c.height = size[1];
-  draw(c.getContext('2d'), c.width, c.height);
+  c.width = Math.max(8, Math.round(size[0] * TEX_SCALE)); c.height = Math.max(8, Math.round(size[1] * TEX_SCALE));
+  const ctx = c.getContext('2d');
+  ctx.scale(c.width / size[0], c.height / size[1]);
+  draw(ctx, size[0], size[1]); // drawn in authored units
   const tex = new THREE.CanvasTexture(c);
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
   if (repeat) { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(repeat[0], repeat[1]); }
@@ -1111,11 +1251,20 @@ function readGpu(gl) {
   } catch { return ''; }
 }
 
-function makeSpriteTexture(kind) {
+/** All emote sprites side by side (64 px cells, SPRITE_KINDS order) for the instanced particles. */
+function makeSpriteAtlas() {
   const c = document.createElement('canvas');
-  c.width = c.height = 64;
+  c.width = 64 * SPRITE_KINDS.length; c.height = 64;
   const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, 64, 64);
+  SPRITE_KINDS.forEach((kind, i) => { ctx.save(); ctx.translate(i * 64, 0); drawSprite(ctx, kind); ctx.restore(); });
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false; // no bleeding between atlas cells
+  tex.minFilter = THREE.LinearFilter;
+  return tex;
+}
+
+function drawSprite(ctx, kind) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const draw = {
     heart: () => { ctx.fillStyle = '#ff7a9a'; path(ctx, 'M32 54 C6 34 8 12 26 12 C32 12 32 20 32 20 C32 20 32 12 38 12 C56 12 58 34 32 54Z'); },
@@ -1127,9 +1276,6 @@ function makeSpriteTexture(kind) {
     sparkle: () => { ctx.fillStyle = '#fff3b0'; path(ctx, 'M32 6 L38 26 L58 32 L38 38 L32 58 L26 38 L6 32 L26 26 Z'); },
   };
   (draw[kind] || draw.sparkle)();
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
 }
 function path(ctx, d) { ctx.fill(new Path2D(d)); }
 

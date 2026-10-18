@@ -194,6 +194,7 @@ async function graphicsFlow(page, name) {
   await page.selectOption('#gfx-preset', 'low');
   await page.waitForFunction(() => document.body.dataset.gfxPreset === 'low');
   if (!/no shadows/.test(await summary())) throw new Error('Low summary: ' + await summary());
+  if (!/ · Level 0 · /.test(await summary())) throw new Error('summary lacks the hardware level: ' + await summary());
   await page.selectOption('#gfx-preset', 'high');
   await page.waitForFunction(() => document.body.dataset.gfxPreset === 'high');
   const hi = await summary();
