@@ -1,0 +1,88 @@
+# The menus on a desktop (1280 x 800): profile, settings (palette and captions), help, the practice setup
+# with a difficulty, a session left from the pause sheet and resumed from the title's Resume card, the
+# decorations drawer in the Interior Designer challenge, and the local leaderboard.
+# viewport 1280x800@1
+until 600 Daily Challenge
+frames 10
+click =Profile
+until 60 sessions played
+frames 10
+save menus-profile
+click =← Back
+until 60 Daily Challenge
+frames 10
+click =Settings
+until 60 Color palette
+frames 10
+save menus-settings
+click =Haptics
+frames 5
+click =Done
+frames 10
+click =Help
+until 60 How to play
+frames 10
+click =Close
+frames 10
+click =Play
+until 60 Choose a mode
+frames 10
+click =Practice
+until 60 Expected length
+frames 10
+click =Brisk
+frames 10
+expect Practice — Brisk
+save menus-practice
+click =Start
+until 300 Objective
+frames 30
+key Digit2 1
+frames 5
+key KeyH 1
+frames 10
+expect Hint:
+key KeyU 1
+frames 10
+expect Undone
+key Escape 1
+until 60 Leave session
+frames 5
+click =Leave session
+until 60 Choose a mode
+frames 10
+click =← Back
+until 60 Resume session
+frames 10
+save menus-resume
+click =Resume session
+until 120 Welcome back
+frames 10
+key Escape 1
+until 60 Leave session
+frames 5
+click =Leave session
+until 60 Choose a mode
+frames 10
+click =Challenge
+until 60 Expected length
+frames 10
+click =Interior Designer
+frames 10
+click =Start
+until 300 Objective
+frames 30
+click =Decorate
+until 60 Decorate the room
+frames 10
+click Toy Blocks
+frames 10
+expect Placed ✓
+click =Done
+frames 30
+save menus-decorated
+key Escape 1
+until 60 Leave session
+frames 5
+click =Leave session
+until 60 Choose a mode

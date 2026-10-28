@@ -9,7 +9,7 @@
 import * as rules from '../src/rules.js';
 import * as content from '../src/content.js';
 import { verifyReplay } from '../src/session.js';
-import { migrateProfile, DEFAULT_SETTINGS } from '../src/storage.js';
+import { migrateProfile, DEFAULT_SETTINGS } from '../src/progress.js';
 
 let passed = 0, failed = 0;
 const failures = [];
