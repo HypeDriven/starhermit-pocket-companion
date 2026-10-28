@@ -474,7 +474,7 @@ function buildAmbient(): void {
   mg.setAttribute("position", new BufferAttribute(pos, 3));
   mg.setDrawRange(0, Math.min(n, look?.budget.motes ?? 50));
   motesMat = new PointsMaterial({
-    color: beam, map: radialTexture(), size: 0.028, transparent: true, opacity: 0.5, blending: AdditiveBlending, depthWrite: false, toneMapped: false,
+    color: beam.clone(), map: radialTexture(), size: 0.028, transparent: true, opacity: 0.5, blending: AdditiveBlending, depthWrite: false, toneMapped: false,
   });
   motes = new Points(mg, motesMat);
   motes.frustumCulled = false;
