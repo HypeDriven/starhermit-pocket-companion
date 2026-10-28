@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "type": "module",
   "private": true,
-  "description": "A cozy companion-care game: feed, clean, entertain, and rest Mote.",
+  "description": "Pocket Companion — a cozy companion-care game: feed, clean, entertain, and rest Mote, on the StarHermit engine.",
   "scripts": {
-    "start": "node server.js",
-    "test": "node tests/run.mjs && node --test tests/gfx.test.mjs tests/platform.test.mjs tests/i18n.test.mjs",
+    "test": "npm run test:unit && npm run test:native",
+    "test:unit": "node tests/run.mjs && node --test tests/progress.test.mjs tests/i18n.test.mjs",
+    "test:native": "node tests/native.mjs",
+    "test:browser": "node tools/browser-play.mjs .",
+    "package": "node tools/package-web.mjs",
+    "css": "node tools/css.mjs",
+    "plays": "node tools/gen-plays.mjs",
     "validate-content": "node tests/validate-content.mjs",
-    "test:e2e": "node tests/e2e.mjs",
-    "test:smoke": "node tests/smoke-pause.mjs"
+    "start": "node server.js"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0"
