@@ -407,6 +407,11 @@ const DE = {
   '💤 wishes for a nap': '💤 wünscht sich ein Nickerchen',
   '🧶 wishes to play': '🧶 wünscht sich zu spielen',
   '🫧 wishes for a bath': '🫧 wünscht sich ein Bad',
+  "Sound, graphics, language, larger text, high contrast and reduced motion are in the StarHermit Options.": "Ton, Grafik, Sprache, größere Schrift, hoher Kontrast und reduzierte Bewegung findest du in den StarHermit-Optionen.",
+  "Open Options": "Optionen öffnen",
+  "Key bindings": "Tastenbelegung",
+  "Leaderboard": "Bestenliste",
+  "Loading…": "Wird geladen…",
 };
 
 const ES = {
@@ -804,6 +809,11 @@ const ES = {
   '💤 wishes for a nap': '💤 desea una siesta',
   '🧶 wishes to play': '🧶 desea jugar',
   '🫧 wishes for a bath': '🫧 desea un baño',
+  "Sound, graphics, language, larger text, high contrast and reduced motion are in the StarHermit Options.": "El sonido, los gráficos, el idioma, el texto más grande, el alto contraste y el movimiento reducido están en las Opciones de StarHermit.",
+  "Open Options": "Abrir Opciones",
+  "Key bindings": "Asignación de teclas",
+  "Leaderboard": "Clasificación",
+  "Loading…": "Cargando…",
 };
 
 const ES_ES = {
@@ -1211,6 +1221,11 @@ const FR = {
   '💤 wishes for a nap': '💤 a envie d’une sieste',
   '🧶 wishes to play': '🧶 a envie de jouer',
   '🫧 wishes for a bath': '🫧 a envie d’un bain',
+  "Sound, graphics, language, larger text, high contrast and reduced motion are in the StarHermit Options.": "Le son, les graphismes, la langue, le texte agrandi, le contraste élevé et le mouvement réduit se trouvent dans les Options StarHermit.",
+  "Open Options": "Ouvrir les Options",
+  "Key bindings": "Touches",
+  "Leaderboard": "Classement",
+  "Loading…": "Chargement…",
 };
 
 const FR_CA = {
@@ -1621,6 +1636,11 @@ const PT = {
   '💤 wishes for a nap': '💤 deseja um cochilo',
   '🧶 wishes to play': '🧶 deseja brincar',
   '🫧 wishes for a bath': '🫧 deseja um banho',
+  "Sound, graphics, language, larger text, high contrast and reduced motion are in the StarHermit Options.": "Som, gráficos, idioma, texto maior, alto contraste e movimento reduzido ficam nas Opções do StarHermit.",
+  "Open Options": "Abrir Opções",
+  "Key bindings": "Atalhos de teclado",
+  "Leaderboard": "Classificação",
+  "Loading…": "Carregando…",
 };
 
 const IT = {
@@ -2018,6 +2038,11 @@ const IT = {
   '💤 wishes for a nap': '💤 desidera un pisolino',
   '🧶 wishes to play': '🧶 desidera giocare',
   '🫧 wishes for a bath': '🫧 desidera un bagnetto',
+  "Sound, graphics, language, larger text, high contrast and reduced motion are in the StarHermit Options.": "Audio, grafica, lingua, testo più grande, contrasto elevato e movimento ridotto si trovano nelle Opzioni di StarHermit.",
+  "Open Options": "Apri Opzioni",
+  "Key bindings": "Assegnazione tasti",
+  "Leaderboard": "Classifica",
+  "Loading…": "Caricamento…",
 };
 
 const EN_GB = {

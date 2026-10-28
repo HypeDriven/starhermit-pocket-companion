@@ -1,10 +1,27 @@
 name=Pocket Companion
 description=Feed, clean, entertain, and rest a virtual companion while caring for its changing needs.
-launch=index.html
 owner=2712e04e-461b-4d23-81ae-e40b429128a8
 server=score-script.js
 version=1.0.0
 cover=cover.jpg
+
+# StarHermit engine script game: one package, played natively by the
+# StarHermit client and in browsers by the engine's web runtime. Browsers open
+# launch=index.html, the loader `npm run package` writes (it pins the engine
+# on wiki.starhermit.com by hash; never edit it). Re-run `npm run package`
+# after every change and commit index.html + starhermit-files.json.
+launch=index.html
+engine.api=1
+engine.entry=native/main.ts
+engine.version=1.19.2
+engine.minor=20
+engine.capabilities=platform,storage,clipboard
+
+# Keyboard controls (players rebind keys and pads in the runtime's Options).
+# The action tray's slots act in the tray's order (decorate opens the
+# decorations); the tray, Mote and every button also play with the pointer,
+# touch, or Tab and Enter (the gamepad's D-pad moves focus, South presses).
+engine.group.slot1=Care actions
 control.slot1=Digit1+Numpad1 | Action 1
 control.slot2=Digit2+Numpad2 | Action 2
 control.slot3=Digit3+Numpad3 | Action 3
@@ -15,7 +32,15 @@ control.slot7=Digit7+Numpad7 | Action 7
 control.slot8=Digit8+Numpad8 | Action 8
 control.slot9=Digit9+Numpad9 | Action 9
 control.slot10=Digit0+Numpad0 | Action 10
+engine.group.hint=Session
 control.hint=KeyH | Hint
 control.undo=KeyU | Undo
 control.camera=KeyC | Camera
 control.pause=Escape | Pause
+
+# Gamepad defaults: Start pauses (or closes a sheet), Y hints, X undoes,
+# Select recentres the camera; the tray is reached by D-pad focus and South.
+engine.gamepad.hint=North
+engine.gamepad.undo=West
+engine.gamepad.camera=Select
+engine.gamepad.pause=Start
