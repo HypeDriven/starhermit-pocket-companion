@@ -1,6 +1,6 @@
 # Pocket Companion — Product and Game Specification
 
-**Document status:** running specification of the game as built: a StarHermit engine script game (engine 1.23.0, `engine.minor=20`), played natively by the StarHermit client and in browsers by the engine's web runtime.  
+**Document status:** running specification of the game as built: a StarHermit engine script game (engine 1.24.0, `engine.minor=20`), played natively by the StarHermit client and in browsers by the engine's web runtime.  
 **Game index:** 64  
 **Genre:** Companion simulation  
 **Players:** 1 player; optional asynchronous score comparison  
@@ -198,7 +198,7 @@ No module mutates rules state except through a validated command; rendering read
 ## 6. StarHermit integration
 
 ### Packaging and launch
-- `starhermit.txt`: `launch=index.html` (the engine's web loader from `npm run package`, with `starhermit-files.json`), `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.23.0`, `engine.minor=20`, capabilities `platform,storage,clipboard`, the `control.*` actions (`slot1`–`slot10` on the number keys and numpad, `hint` H, `undo` U, `camera` C, `pause` Escape) with gamepad defaults (Start pause, North hint, West undo, Select camera; the tray and every button by D-pad focus and South), `server=score-script.js`.
+- `starhermit.txt`: `launch=index.html` (the engine's web loader from `npm run package`, with `starhermit-files.json`), `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.24.0`, `engine.minor=20`, capabilities `platform,storage,clipboard`, the `control.*` actions (`slot1`–`slot10` on the number keys and numpad, `hint` H, `undo` U, `camera` C, `pause` Escape) with gamepad defaults (Start pause, North hint, West undo, Select camera; the tray and every button by D-pad focus and South), `server=score-script.js`.
 - `.starhermitignore` leaves out tests/, tools/, docs and the dev server.
 
 ### Controls
