@@ -24,7 +24,7 @@
 // between the HUD rails: the camera spans the window with a view offset so
 // the room is framed in that rectangle (screens.ts paints the page around it).
 import {
-  ACESFilmicToneMapping, AdditiveBlending, BackSide, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CircleGeometry, Color,
+  ACESFilmicToneMapping, OrthographicCamera, AdditiveBlending, BackSide, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CircleGeometry, Color,
   ConeGeometry, CylinderGeometry, DirectionalLight, DoubleSide, Group, HemisphereLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial,
   MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, PMREMGenerator, PointLight, Points, PointsMaterial, Raycaster,
   RepeatWrapping, RingGeometry, RoomEnvironment, SphereGeometry, Sprite, SpriteMaterial, SRGBColorSpace, TorusGeometry, Vector2, Vector3,
@@ -292,14 +292,18 @@ camera.lookAt(CAM.look);
 /** The old canvas's camera (the playfield's aspect, no view offset): projection and picking. */
 const probe = new PerspectiveCamera(CAM.fov, 1, 0.1, 60);
 
-const hemi = new HemisphereLight(0xfff2dd, 0x6b5a4a, ENV.hemiWithout / Math.PI);
-const key = new DirectionalLight(0xffe0b3, 1.6 / Math.PI);
+const hemi = new HemisphereLight(0xfff2dd, 0x6b5a4a, ENV.hemiWithout);
+const key = new DirectionalLight(0xffe0b3, 1.6);
 key.position.set(3.5, 6, 4);
 key.shadow.bias = -0.0004;
-key.shadow.normalBias = 1; // three's 0.02 world units; the engine's normal bias is in texels
+key.shadow.normalBias = 0.02;
 key.shadow.radius = 3;
-key.shadow.distance = 20;
-const lamp = new PointLight(0xffc978, 12 / Math.PI, 9, 1.8);
+{ // the page's fixed shadow box around the room
+  const sc = key.shadow.camera as OrthographicCamera;
+  sc.left = -5.2; sc.right = 5.2; sc.top = 5.2; sc.bottom = -5.2; sc.near = 3; sc.far = 17;
+  sc.updateProjectionMatrix();
+}
+const lamp = new PointLight(0xffc978, 12, 9, 1.8);
 lamp.position.set(-2.6, 2.4, -1.6);
 scene.add(hemi, key, key.target, lamp);
 
@@ -744,7 +748,7 @@ function applyScene(): void {
   // r160 scaled scene.environment by each material's envMapIntensity; at engine minor 20 (three r185) the
   // scene environment ignores it, so every lit material carries the environment as its own envMap.
   for (const m of envMats) { const want = env ? envTex : null; if (m.envMap !== want) m.envMap = want; }
-  hemi.intensity = (env ? ENV.hemiWithEnv : ENV.hemiWithout) / Math.PI;
+  hemi.intensity = (env ? ENV.hemiWithEnv : ENV.hemiWithout);
   const det = look.detailed;
   if (propGroup) propGroup.visible = det;
   for (const d of detailMaps) { const want = det ? d.map : null; if (d.mat.map !== want) d.mat.map = want; }
@@ -964,7 +968,7 @@ export function update(dtIn: number, w: number, h: number, rect: Rect): void {
   // Window glow shimmer, lamp flicker and drifting motes; still under reduced motion.
   const on = !!look?.ambient;
   const still = rm || !on;
-  lamp.intensity = (still ? 12 : 12 * (1 + 0.035 * Math.sin(elapsed * 6.3) + 0.02 * Math.sin(elapsed * 13.7 + 1.3))) / Math.PI;
+  lamp.intensity = (still ? 12 : 12 * (1 + 0.035 * Math.sin(elapsed * 6.3) + 0.02 * Math.sin(elapsed * 13.7 + 1.3)));
   if (windowGlow) (windowGlow.material as MeshBasicMaterial).opacity = still ? 0.1 : 0.1 + 0.03 * Math.sin(elapsed * 0.7);
   if (on && !still && motes) {
     const pos = motes.geometry.attributes.position!;
