@@ -730,7 +730,7 @@ function applyScene(): void {
   if (size > 0) key.shadow.mapSize = size;
   const env = look.reflections;
   if (env && !envTex) {
-    try { envTex = new PMREMGenerator(renderer).fromScene(new RoomEnvironment(renderer), 0.04).texture; } catch (e) { console.warn(`environment: ${String(e)}`); }
+    try { const pageRoom = new RoomEnvironment(renderer); pageRoom.position.y = 0; /* the page's three r160 (pre-r183) builds the room at the origin */ envTex = new PMREMGenerator(renderer).fromScene(pageRoom, 0.04).texture; } catch (e) { console.warn(`environment: ${String(e)}`); }
   }
   // r160 scaled scene.environment by each material's envMapIntensity; at engine minor 20 (three r185) the
   // scene environment ignores it, so every lit material carries the environment as its own envMap.
