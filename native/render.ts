@@ -214,19 +214,6 @@ function spriteTexture(kind: SpriteKind): CanvasTexture {
   return tex;
 }
 
-/** three's ACESFilmicToneMapping on one linear colour (the old composer tone-mapped the clear colour too). */
-function aces(c: Color, exposure: number): Color {
-  const k = exposure / 0.6;
-  const v = [c.r * k, c.g * k, c.b * k];
-  const inM = [[0.59719, 0.07600, 0.02840], [0.35458, 0.90834, 0.13383], [0.04823, 0.01566, 0.83777]];
-  const outM = [[1.60475, -0.10208, -0.00327], [-0.53108, 1.10813, -0.07276], [-0.07367, -0.00605, 1.07602]];
-  const mul = (m: number[][], x: number[]): number[] => [0, 1, 2].map((r) => m[0]![r]! * x[0]! + m[1]![r]! * x[1]! + m[2]![r]! * x[2]!);
-  const fit = (x: number): number => (x * (x + 0.0245786) - 0.000090537) / (x * (0.983729 * x + 0.4329510) + 0.238081);
-  const o = mul(outM, mul(inM, v).map(fit)).map((x) => Math.max(0, Math.min(1, x)));
-  const out = new Color();
-  out.r = o[0]!; out.g = o[1]!; out.b = o[2]!;
-  return out;
-}
 
 /**
  * Merge a group's static, untextured, non-emissive meshes that share a shading signature into one mesh
@@ -764,7 +751,8 @@ export function applyLook(next: Look): void {
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   // UnrealBloomPass(0.42, 0.45, 0.92): only the lamp bulb, window, eye glints and sparkles bloom.
-  renderer.bloom = next.bloom ? { strength: 0.42, radius: 0.45, threshold: 0.92, resolution: b.bloomRes } : null;
+  // three r160 page: UnrealBloomPass 0.42 squared (0.1764) for the engine's r185 bloom (engine.minor 29).
+  renderer.bloom = next.bloom ? { strength: 0.1764, radius: 0.45, threshold: 0.92, resolution: b.bloomRes } : null;
   // GTAOPass: radius 0.45, distance exponent 1.4, thickness 1; 16 / 8 samples and the denoise per tier; blend 0.85.
   renderer.ao = next.ao === "off" ? null : {
     blendIntensity: 0.85, radius: 0.45, distanceExponent: 1.4, thickness: 1.0, scale: 1,
@@ -773,16 +761,14 @@ export function applyLook(next: Look): void {
   };
   // GradeShader on the linear buffer before OutputPass: a 0.22 S-curve, saturation 1.07, cool shadows / warm
   // highlights by a smoothstep of luma from 0.15 to 0.85, a 0.24 vignette from 0.38 to 0.9 (x scaled 1.1).
-  // Its final small lift (× 0.975 + 0.02) has no grade term and is left out.
+  // Its final small lift (× 0.975 + 0.02) is levels; the page clamped, so no overRange "keep".
   renderer.grade = next.grade ? {
-    space: "linear", contrast: 0.22, saturation: 1.07, split: [0.15, 0.85], shadows: [0.97, 0.98, 1.04], highlights: [1.04, 1.0, 0.95],
+    space: "linear", contrast: 0.22, saturation: 1.07, levels: [0.975, 0.02], split: [0.15, 0.85], shadows: [0.97, 0.98, 1.04], highlights: [1.04, 1.0, 0.95],
     vignette: { amount: 0.24, inner: 0.38, outer: 0.9, scale: [1.1, 1] },
   } : null;
   renderer.antialias = next.antialias;
-  // Background via scene.background; the old post chain tone-mapped it, direct rendering (Low) did not.
-  const bg = new Color(0x241d2b);
-  const post = next.ao !== "off" || next.bloom || next.grade || next.antialias === "fxaa" || next.antialias === "smaa";
-  scene.background = post ? aces(bg, 1) : bg;
+  // Background via scene.background; the post chain tone-maps it as the old composer did (engine.minor 29).
+  scene.background = new Color(0x241d2b);
   if (particles.length > spriteCap(next)) particles.splice(0, particles.length - spriteCap(next));
   if (builtCreature !== tier()) buildCreature();
   else if (body && bodySegs !== b.body.join("x")) {
