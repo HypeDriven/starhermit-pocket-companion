@@ -4,14 +4,14 @@ A cozy companion-care game: feed, clean, entertain, and rest **Mote**, an expres
 little creature living in a customizable room. Turn-based and fully deterministic —
 every session is a replayable, hash-verified log of your commands.
 
-A StarHermit engine script game (engine 1.24.0, `engine.minor=20`): the StarHermit
+A StarHermit engine script game (engine 1.28.0, `engine.minor=30`): the StarHermit
 client plays it natively and browsers play the same package through the engine's web
 runtime (`index.html` is the loader `npm run package` writes).
 
 ## Run
 
 ```bash
-starhermit .            # the engine runtime (~/sh/runtime/1.24.0/…/starhermit)
+starhermit .            # the engine runtime (~/sh/runtime/1.28.0/…/starhermit)
 npm run package         # after every change: the web loader + starhermit-files.json
 node server.js          # optional dev server (static files + validated boards) on :8080
 ```

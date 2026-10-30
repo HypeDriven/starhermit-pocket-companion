@@ -751,8 +751,8 @@ export function applyLook(next: Look): void {
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   // UnrealBloomPass(0.42, 0.45, 0.92): only the lamp bulb, window, eye glints and sparkles bloom.
-  // three r160 page: UnrealBloomPass 0.42 squared (0.1764) for the engine's r185 bloom (engine.minor 29).
-  renderer.bloom = next.bloom ? { strength: 0.1764, radius: 0.45, threshold: 0.92, resolution: b.bloomRes } : null;
+  // three r160 page: bloom model "r160" with the page's strength 0.42 (engine.minor 30).
+  renderer.bloom = next.bloom ? { model: "r160", strength: 0.42, radius: 0.45, threshold: 0.92, resolution: b.bloomRes } : null;
   // GTAOPass: radius 0.45, distance exponent 1.4, thickness 1; 16 / 8 samples and the denoise per tier; blend 0.85.
   renderer.ao = next.ao === "off" ? null : {
     blendIntensity: 0.85, radius: 0.45, distanceExponent: 1.4, thickness: 1.0, scale: 1,
