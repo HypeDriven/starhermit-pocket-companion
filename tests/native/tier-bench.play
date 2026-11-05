@@ -1,0 +1,21 @@
+# Tier bench: Journey stage 1's room with Mote reacting (real UI path, fixed stage).
+# viewport 1280x800@1
+until 600 Daily Challenge
+frames 10
+click =Play
+until 120 Choose a mode
+frames 10
+click =Journey
+until 120 Chapter 1
+frames 10
+click 1. First Supper
+until 120 Expected length
+frames 10
+click =Start
+until 300 Objective
+frames 120
+measure start
+frames 200
+key Digit2 1
+frames 400
+measure stop

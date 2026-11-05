@@ -73,26 +73,9 @@ function button(b: Btn): void {
   if (b.height != null) s.height = b.height;
   if (ui.style(style, s).id(b.id).button(b.name ?? b.text, opts) && fresh()) later(b.act);
 }
-/** Buttons at their own widths (or stretched) in rows that wrap at `width` (flex-wrap). */
-function flow(label: string, list: Btn[], width: number, gap = 10, stretch = false, justify: "start" | "center" = "center"): void {
-  const rows: Btn[][] = [[]];
-  let used = 0;
-  const bw = (b: Btn): number => Math.min(width, b.width ?? buttonWidth(b.text, b.style ?? "btn"));
-  for (const b of list) {
-    const w = bw(b);
-    if (rows[rows.length - 1]!.length && used + gap + w > width) { rows.push([]); used = 0; }
-    used += (rows[rows.length - 1]!.length ? gap : 0) + w;
-    rows[rows.length - 1]!.push(b);
-  }
-  ui.column(label, () => {
-    rows.forEach((row, ri) => ui.row(`${label}-r${ri}`, () => {
-      if (stretch) {
-        const total = row.reduce((n, b) => n + bw(b), 0);
-        const extra = (width - total - gap * (row.length - 1)) / row.length;
-        for (const b of row) button({ ...b, width: bw(b) + extra });
-      } else for (const b of row) button(b);
-    }, { spacing: gap, width, justify, align: "center" }));
-  }, { spacing: gap, width });
+/** Buttons at their own widths in rows that wrap at `width` (flex-wrap). */
+function flow(label: string, list: Btn[], width: number, gap = 10, justify: "start" | "center" = "center"): void {
+  ui.row(label, () => { for (const b of list) button(b); }, { wrap: true, width, gap, justify, align: "center" });
 }
 function rect(r: ui.Rect): void { hudRects.push({ x: r.x, y: r.y, width: r.width, height: r.height }); }
 /** A box over a window rectangle (window px) drawn by a placed role-none widget. */
@@ -566,7 +549,7 @@ function settingsSheet(L: Layout): void {
     flow("settings-runtime", [
       { id: "btn-options", text: T("Open Options"), act: () => openMenu() },
       { id: "btn-rebind", text: T("Key bindings"), act: () => requestRebind() },
-    ], w, 10, false, "start");
+    ], w, 10, "start");
     selectRow("set-palette", T("Color palette"), Math.max(0, Progress.PALETTES.indexOf(o.palette)), PALETTE_NAMES.map((p) => T(p)), w,
       (i) => platform.setOption("palette", Progress.PALETTES[i]!));
     toggleRow("set-captions", N("Captions"), o.captions, w, (v) => platform.setOption("captions", v), N("Text cues for meaningful audio."));

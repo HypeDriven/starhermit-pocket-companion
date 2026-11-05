@@ -126,14 +126,14 @@ The subject is the active playfield at near-tabletop to room scale, framed so st
 
 The room renders with ACES filmic tone mapping (exposure 1) and sRGB output: a warm hemisphere fill, a key directional light with soft shadows, and the lamp as a point light with a bright bulb (three.js r160 intensities ÷ π, as the engine takes three's legacy light units). Mote's plush body takes the mood colour; eyes are glossy (clear-coat on High/Ultra) with catchlights; a soft contact shadow grounds Mote on every level. With room detail the props appear (lamp, plant, shelf of books, cushion, yarn ball) and surfaces get the procedural canvas textures (plank grain and seams, plaster with faint wallpaper stripes, wainscot panels, a woven rug, wound yarn) and the window shows a gradient night or day sky with stars and moon on dark themes. Ambient motion adds dust motes drifting in a pool of window light, a gentle lamp flicker and window shimmer; it holds still under reduced motion (the runtime's option). Emote particles (hearts, bubbles, notes, crumbs, zzz, stars, sparkles) are pooled sprites.
 
-The runtime's Options choose the graphics level (Auto from the hardware, or a level); `native/quality.ts` maps its tier (`frame().quality`) to the browser build's presets, scaling emote and dust budgets within a tier by the level (≤ 2×). Changes apply live.
+The runtime's Options choose the graphics level (Auto from the hardware, or a level); shadows, AO, bloom, grade and AA come from the engine's `levelSettings()` for the frame's level (shown at each tier's first level); `native/quality.ts` keys the art columns by its tier (`frame().quality`), as the browser build's presets, scaling emote and dust budgets within a tier by the level's particle budget (≤ 2×). Changes apply live.
 
 | Tier | Shadows | AO (GTAO) | Bloom (0.42 / 0.45 / 0.92) | Grade + vignette | AA | Reflections (room environment) | Detail + ambient | Shading | Textures | Body segments | Emotes / motes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | Low | off | off | off | off | off | off | plain | Lambert | ½ | 24×18 | 60 / 40 |
-| Balanced | 512 | off | on (½ res) | on | FXAA | on | on | Standard | ½ | 32×24 | 160 / 50 |
-| High | 1024 | on (½ res) | on (½ res) | on | SMAA | on | on | clear-coat | 1 | 40×30 | 400 / 70 |
-| Ultra | 2048 | high | on | on | MSAA | on | on | clear-coat | 1.5 | 56×40 | 600 / 120 |
+| Balanced | 1024 | off | on (½ res) | on | FXAA | on | on | Standard | ½ | 32×24 | 160 / 50 |
+| High | 2048 | on (½ res) | on (½ res) | on | SMAA | on | on | clear-coat | 1 | 40×30 | 400 / 70 |
+| Ultra | 4096 | full res, 16 samples | on | on | MSAA 4 | on | on | clear-coat | 1.5 | 56×40 | 600 / 120 |
 
 The colour grade is the old shader on linear light (0.22 S-curve, saturation 1.07, cool shadows / warm highlights over luma 0.15–0.85, a 0.24 vignette from 0.38 to 0.9); its final small lift is left out. The render scale, adaptive resolution, frame-rate limit and readout, and the GPU summary that the old Graphics panel offered are the runtime's.
 

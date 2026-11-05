@@ -727,7 +727,7 @@ function applyScene(): void {
   const size = look.shadows;
   renderer.shadowMap.enabled = size > 0;
   key.castShadow = size > 0;
-  if (size > 0) key.shadow.mapSize = size;
+  if (size > 0) key.shadow.mapSize = size; // the level's size: at minor ≥ 23 the engine keeps whatever the game sets
   const env = look.reflections;
   if (env && !envTex) {
     try { const pageRoom = new RoomEnvironment(renderer); pageRoom.position.y = 0; /* the page's three r160 (pre-r183) builds the room at the origin */ envTex = new PMREMGenerator(renderer).fromScene(pageRoom, 0.04).texture; } catch (e) { console.warn(`environment: ${String(e)}`); }
@@ -752,12 +752,13 @@ export function applyLook(next: Look): void {
   renderer.toneMappingExposure = 1.0;
   // UnrealBloomPass(0.42, 0.45, 0.92): only the lamp bulb, window, eye glints and sparkles bloom.
   // three r160 page: bloom model "r160" with the page's strength 0.42 (engine.minor 30).
-  renderer.bloom = next.bloom ? { model: "r160", strength: 0.42, radius: 0.45, threshold: 0.92, resolution: b.bloomRes } : null;
-  // GTAOPass: radius 0.45, distance exponent 1.4, thickness 1; 16 / 8 samples and the denoise per tier; blend 0.85.
-  renderer.ao = next.ao === "off" ? null : {
+  renderer.bloom = next.bloom === null ? null : { model: "r160", strength: 0.42, radius: 0.45, threshold: 0.92, resolution: next.bloom };
+  // GTAOPass: radius 0.45, distance exponent 1.4, thickness 1; samples and denoise from the level; blend 0.85.
+  const ao = next.ao, aoFull = !!ao && ao.resolution >= 1;
+  renderer.ao = ao && {
     blendIntensity: 0.85, radius: 0.45, distanceExponent: 1.4, thickness: 1.0, scale: 1,
-    samples: next.ao === "high" ? 16 : 8, resolution: b.aoRes,
-    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
+    samples: ao.samples, resolution: ao.resolution,
+    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: aoFull ? 6 : 4, rings: 2, samples: ao.denoiseSamples, radiusExponent: 2 },
   };
   // GradeShader on the linear buffer before OutputPass: a 0.22 S-curve, saturation 1.07, cool shadows / warm
   // highlights by a smoothstep of luma from 0.15 to 0.85, a 0.24 vignette from 0.38 to 0.9 (x scaled 1.1).

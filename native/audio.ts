@@ -11,8 +11,8 @@
 // it played while a sample decoded are not ported (a live synthesis graph
 // makes clip loads fail on the web runtime): a clip still loading is
 // silent, but its caption still shows. The runtime's Options own the
-// volumes, the mute and the voice limit. Clips load once the mixer runs
-// (natively at once, in a browser after the first press), one at a time.
+// volumes, the mute and the voice limit. Every clip loads at start; the
+// bed and the pad wait for the mixer (in a browser, the first press).
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
 import { Rules } from "./game.ts";
 
@@ -30,16 +30,17 @@ export const CAPTIONS: Partial<Record<Sfx, string>> = {
   complete: "session complete!", expired: "time is up", neglected: "Mote needs you",
 };
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [];
-let loading = false;
-let wantClips = false;
 let suspended = false;
 let onCaption: ((key: string) => void) | null = null;
 /** The caption line's hook (main.ts shows it when the Captions option is on). */
 export function setCaptionHandler(fn: (key: string) => void): void { onCaption = fn; }
 
-/** Asks for the clips; they load once the mixer runs (see update). */
-export function loadSfx(): void { wantClips = true; }
+/** Loads every clip at once (onStart); a cue whose clip is still loading is silent. */
+export function loadSfx(): void {
+  for (const name of SFX) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${e instanceof Error ? e.message : String(e)}`));
+  }
+}
 
 /** A logical event's sound (event hierarchy: ack < move < goal < round) and its caption. */
 export function event(name: string): void {
@@ -48,7 +49,7 @@ export function event(name: string): void {
   if (suspended) return;
   const clip = clips.get(name);
   if (!clip) return;
-  try { playClip(clip, { bus: name.startsWith("ui-") ? "interface" : "effects" }); } catch { clips.delete(name); if (!queue.includes(name)) queue.push(name); }
+  try { playClip(clip, { bus: name.startsWith("ui-") ? "interface" : "effects" }); } catch { /* the mixer is full this frame: skip it */ }
 }
 
 // -- the ambient bed and the music pad ------------------------------------------------------------
@@ -115,25 +116,9 @@ export function setSuspended(on: boolean): void {
   } catch { /* gone */ }
 }
 
-/** Each frame: the clips once the mixer runs (one at a time), then the bed and the pad. */
+/** Each frame: once the mixer runs, the bed and the pad. */
 export function update(): void {
   if (context.state !== "running") return;
-  if (wantClips) {
-    wantClips = false;
-    for (const n of SFX) if (!queue.includes(n)) queue.push(n);
-  }
-  if (!loading && queue.length) {
-    const name = queue.shift()!;
-    if (!clips.has(name)) {
-      loading = true;
-      loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => {
-        console.warn(`sfx ${name}: ${e instanceof Error ? e.message : String(e)}`);
-        loading = false;
-      });
-    }
-    return;
-  }
-  if (loading) return;
   if (!ambClip) {
     if (!renderAmbience(8000)) return;
     try { ambClip = createClip([amb], RATE); } catch (e) { console.warn(`audio: ${String(e)}`); ambPos = 0; }
