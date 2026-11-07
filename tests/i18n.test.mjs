@@ -5,12 +5,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { STRINGS, EN } from '../src/strings.js';
-import { LOCALES, t, setLocale, contentName, pickLocale } from '../src/i18n.js';
+import { contentName } from '../src/i18n.js';
 import * as content from '../src/content.js';
 import { ACTIONS, INVALID_REASONS } from '../src/rules.js';
 import { ACHIEVEMENTS } from '../src/progress.js';
-import { pickPlatformLocale, platformStrings } from '../src/platform-i18n.js';
+
+const STRINGS = JSON.parse(readFileSync(new URL('../assets/strings.json', import.meta.url), 'utf8'));
+const LOCALES = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT'];
+const US = STRINGS['en-US'];
+const EN = Object.fromEntries(Object.entries(US).filter(([k, v]) => k !== v));
+const tIn = (loc) => (k, vars) => { const s = STRINGS[loc]?.[k] ?? US[k] ?? k; return vars ? s.replace(/\{(\w+)\}/g, (m, n) => (n in vars ? String(vars[n]) : m)) : s; };
 
 const NATIVE = new URL('../native/', import.meta.url);
 
@@ -62,15 +66,9 @@ test('nine locales; en-GB overrides only real keys', () => {
   for (const k of Object.keys(STRINGS['en-GB'])) assert.ok(keys.has(k), 'unknown en-GB key ' + k);
 });
 
-test('locale picking, content names and the account strings', () => {
-  assert.equal(pickLocale('de'), 'de-DE');
-  assert.equal(pickLocale('es-MX'), 'es-419');
-  assert.equal(pickLocale('fr-CA'), 'fr-CA');
-  assert.equal(pickLocale('ja-JP'), 'en-US');
-  setLocale('de-DE');
-  assert.equal(t('Feed'), STRINGS['de-DE'].Feed);
-  assert.match(contentName('Daily — 2026-01-01'), /2026-01-01/);
-  setLocale('en-US');
-  assert.equal(contentName('Practice — Gentle'), 'Practice — Gentle');
-  for (const loc of LOCALES) assert.ok(platformStrings(pickPlatformLocale(loc)).lbRank.includes('{rank}'));
+test('content names', () => {
+  const de = tIn('de-DE');
+  assert.equal(de('Feed'), STRINGS['de-DE'].Feed);
+  assert.match(contentName('Daily — 2026-01-01', de), /2026-01-01/);
+  assert.equal(contentName('Practice — Gentle', tIn('en-US')), 'Practice — Gentle');
 });

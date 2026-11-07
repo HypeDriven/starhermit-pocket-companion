@@ -1,40 +1,29 @@
-// Localization: the browser build's tables (src/strings.js through
-// src/i18n.js, en-US text as the keys, the nine StarHermit locales; the
-// account strings in src/platform-i18n.js) in the interface language the
-// runtime reports (preferences().language: the player's choice in Options ›
-// Language, else the account's preferred language or the device's). The
-// runtime's Options replace the game's own Language setting (sh-language.js):
-// every string is drawn through T() each frame, so a change shows on the next
-// frame and never touches the session or its clock.
-import { onPreferencesChange, preferences } from "starhermit:engine";
+// Localization: assets/strings.json (en-US text as the keys, the nine StarHermit
+// locales) through the engine's strings, with its starhermit.* account strings,
+// in the interface language the runtime reports (Options › Language, else the
+// account's or the device's). Every string is drawn through T() each frame, so a
+// change shows on the next frame and never touches the session or its clock.
+import { strings } from "starhermit:engine";
 import * as ui from "starhermit:ui";
-import { contentName as nameOf, setLocale, t } from "../src/i18n.js";
-import { pickPlatformLocale, platformStrings } from "../src/platform-i18n.js";
+import { contentName as nameOf } from "../src/i18n.js";
 
-let locale = "";
-function apply(tag: string): void {
-  const next = pickPlatformLocale(String(tag || "en-US"));
-  if (next === locale) return;
-  locale = next;
-  setLocale(locale);
-  ui.setLanguage(locale);
-}
-apply(preferences().language);
-onPreferencesChange((p) => apply(p.language));
+strings.load("assets/strings.json");
+strings.defaultLocale = "en-US";
+ui.setLanguage(strings.locale);
+strings.onChange((locale) => ui.setLanguage(locale));
 
-export function currentLocale(): string { return locale; }
 export type Vars = Record<string, string | number>;
-/** An en-US source string (or symbolic key) in the player's language; `{name}` placeholders from vars. */
-export function T(key: string, vars?: Vars | null): string { return t(key, vars ?? undefined) as string; }
+/** An en-US source string (or symbolic key) in the player's language; `{name}` placeholders from vars. A text with no entry is itself. */
+export function T(key: string, vars?: Vars | null): string {
+  const k = String(key);
+  if (strings.has(k)) return strings.t(k, vars ?? undefined);
+  return vars ? k.replace(/\{(\w+)\}/g, (m, name: string) => (name in vars ? String(vars[name]) : m)) : k;
+}
 /** Marks an en-US key that is translated with T() where it is shown. */
 export const N = (s: string): string => s;
-/** The account strings (signIn, invite, inviteCopied, inviteFailed, signedOut, lbPosting, lbRank, lbPosted, lbNotPosted). */
-export function S(key: string, vars?: Vars): string {
-  let s = (platformStrings(locale) as Record<string, string>)[key] ?? key;
-  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
-  return s;
-}
+/** The engine's account strings. */
+export function S(key: string, vars?: Vars): string { return strings.t(`starhermit.${key}`, vars); }
 /** A session's display name (Daily, Practice and Score chase names keep their date, level or number). */
-export function contentName(name: string): string { return nameOf(name) as string; }
+export function contentName(name: string): string { return nameOf(name, T) as string; }
 /** The help texts carried HTML (<em>, <strong>, <kbd>): plain text here. */
 export function plain(s: string): string { return s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&"); }

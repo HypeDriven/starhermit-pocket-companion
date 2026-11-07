@@ -176,7 +176,7 @@ Follow the skill pack's acceptance gate: deterministic seeds, debug views for co
 - `native/render.ts`: the room and Mote on `starhermit:scene`; `native/quality.ts`: the look per graphics level.
 - `native/audio.ts`: the authored samples (`sfx/*.opus`) per event with captions, the ambient bed and the music pad rendered into looping clips.
 - `native/platform.ts`: the save, the old cloud slot migration, the game's options as engine settings, the platform clock, the invite link, the high-score board and score posting; `native/i18n.ts` and `native/style.ts` (the converted style sheet, palettes, high contrast); `native/game.ts` types the shared modules.
-- Shared with the node tests, unchanged in behaviour: `src/rules.js`, `src/content.js`, `src/session.js`, `src/progress.js` (the save model, merge, bookkeeping; moved from the old storage.js / main.js), `src/i18n.js`, `src/strings.js`, `src/platform-i18n.js`. `server.js` stays the local dev server.
+- Shared with the node tests, unchanged in behaviour: `src/rules.js`, `src/content.js`, `src/session.js`, `src/progress.js` (the save model, merge, bookkeeping; moved from the old storage.js / main.js), `src/i18n.js` (session names). `server.js` stays the local dev server.
 
 No module mutates rules state except through a validated command; rendering reads the rules' mood and events.
 
@@ -255,7 +255,7 @@ Success targets for the first public test: median first-play time under 20 secon
 
 ### Language
 
-- Every player-facing string ships in en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT (`src/strings.js`, account strings in `src/platform-i18n.js`); the game follows the runtime's interface language (Options → Language, else the account's preferred language, else the device's). A change shows on the next frame and never touches the session. The game name and Mote's name are never translated.
+- Every player-facing string ships in en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT (`assets/strings.json` through the engine's `strings`; account lines are its `starhermit.*`); the game follows the runtime's interface language (Options → Language, else the account's preferred language, else the device's). A change shows on the next frame and never touches the session. The game name and Mote's name are never translated.
 - `tests/i18n.test.mjs` checks that every key used in `native/*.ts` and the content exists in all nine locales with matching placeholders.
 
 ### Graphics and performance

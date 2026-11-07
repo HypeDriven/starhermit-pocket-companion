@@ -19,7 +19,8 @@ import { bindings, requestRebind } from "starhermit:input";
 import * as draw from "starhermit:draw";
 import * as ui from "starhermit:ui";
 import { Content, Progress, Rules, type Need } from "./game.ts";
-import { N, S, T, contentName, currentLocale, plain } from "./i18n.ts";
+import { N, S, T, contentName, plain } from "./i18n.ts";
+import { strings } from "starhermit:engine";
 import * as platform from "./platform.ts";
 import * as render from "./render.ts";
 import {
@@ -34,10 +35,8 @@ import { token } from "./style.ts";
 type Kind = "wide" | "compact" | "phone" | "land";
 interface Layout { lw: number; lh: number; sc: number; kind: Kind }
 function layoutNow(): Layout {
-  const f = frame();
-  const sc = ui.preferences().scale;
-  const sa = f.safeArea;
-  const lw = Math.max(1, (f.width - sa.left - sa.right) / sc), lh = Math.max(1, (f.height - sa.top - sa.bottom) / sc);
+  const v = ui.viewport!();
+  const sc = v.scale, lw = Math.max(1, v.width), lh = Math.max(1, v.height);
   const kind: Kind = lw >= 1024 ? "wide" : lw <= 900 && lw > lh && lh <= 500 ? "land" : lw <= 700 ? "phone" : "compact";
   return { lw, lh, sc, kind };
 }
@@ -113,7 +112,7 @@ function cardButton(id: string, title: string, lines: string[], cw: number, act:
     }, { spacing: 4, width: inner }),
   });
 }
-const uc = (s: string): string => s.toLocaleUpperCase(currentLocale());
+const uc = (s: string): string => s.toLocaleUpperCase(strings.locale);
 /** The first keyboard key of an action ("1", "H", "Esc"). */
 const GLYPH: Record<string, string> = { Escape: "Esc", "Arrow Up": "↑", "Arrow Down": "↓", "Arrow Left": "←", "Arrow Right": "→" };
 function keyOf(action: string): string {

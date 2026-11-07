@@ -448,8 +448,8 @@ function postToLeaderboard(total: number | null): void {
 export function leaderboardLine(): string | null {
   const lb = app.lb;
   if (!lb) return null;
-  if (lb === "posting") return S("lbPosting");
-  return !lb.posted ? S("lbNotPosted") : lb.rank ? S("lbRank", { rank: lb.rank }) : S("lbPosted");
+  if (lb === "posting") return S("leaderboardPosting");
+  return !lb.posted ? S("leaderboardNotPosted") : lb.rank ? S("leaderboardRank", { rank: lb.rank }) : S("leaderboardPosted");
 }
 /** The leaderboard screen: the platform's board when signed in, else the local casual board. */
 export async function loadBoard(friends: boolean): Promise<void> {
@@ -535,7 +535,7 @@ export function signIn(): void { void requestSignIn().catch(() => undefined); }
 export function copyInvite(): void {
   const link = platform.inviteLink();
   if (!link) return;
-  try { clipboard.writeText(link); toast(S("inviteCopied")); } catch { toast(S("inviteFailed", { link })); }
+  try { clipboard.writeText(link); toast(S("inviteCopied")); } catch { toast(S("inviteLink", { link })); }
 }
 /** The guest name (local boards); signed in, the account's name wins. */
 export function setGuestName(name: string): void {
