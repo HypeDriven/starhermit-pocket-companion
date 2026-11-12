@@ -297,3 +297,11 @@ This document does **not** authorize implementation, asset production, monetizat
 
 - `npm test`: `tests/run.mjs` (rules, property, fuzz, golden and content validation — 127 checks), `tests/progress.test.mjs` (save model, merge, the old cloud document, options, bookkeeping), `tests/i18n.test.mjs`, then `tests/native.mjs`: the web index is current, `tsc`, `starhermit check .` with no warnings, and the play scripts in `tests/native/` as render checks: Journey 1–3 by keys to their results (desktop), the five lessons by finger (phone, DPR 3), the Beat the Clock challenge by finger with pause and help (short landscape, DPR 3), and the menus (profile, settings, help, practice setup, leave and resume, decorations). `npm run plays` regenerates the generated scripts from the rules.
 - `npm run test:browser` (`tools/browser-play.mjs`) plays the packaged web build in Chrome on the GPU at desktop, phone and landscape (keys, clicks and taps on the tray and Mote, pause, settings) and fails on console errors.
+
+<!-- regional-localization:start -->
+
+### Regional interface languages
+
+The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-SG`, `en-HK`, `en-BQ`, `es-CO`, `de-IT`, `fr-IT`, `es-CL`, `es-AR`, `es-EC`, `de-BR`. These reuse the corresponding existing translations in their language family. The runtime can resolve the exact regional tag. Language selection is available from the game’s Options panel or F2 and is saved per player in `ui.language`. Changes apply during play. Additional national, regional and indigenous language packs are only shipped once every English message has a translation with intact placeholders and markup. Complete additional language tables: `ja-JP`, `nl-BE`, `zh-SG`, `ms-SG`, `zh-HK`, `yue-HK`, `nl-NL`, `fi-FI`, `sv-FI`, `et-EE`, `id-ID`, `vi-VN`, `ta-SG`, `ru-FI`, `ru-EE`, `da-DE`, `lb-BE`, `co-FR`, `eu-FR`, `ca-FR`, `oc-FR`, `sl-IT`, `fur-IT`, `ca-IT`, `oc-IT`, `ca-ES`, `eu-ES`, `gl-ES`, `su-ID`, `bew-ID`, `km-VN`.
+
+<!-- regional-localization:end -->

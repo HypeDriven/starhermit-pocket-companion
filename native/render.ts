@@ -1,3 +1,5 @@
+// localization-runtime:attached
+import { localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
 // The cozy room and Mote on starhermit:scene, as the browser build's
 // src/render.js drew them with three.js r160: the curved plastered back wall
 // with its wainscot band and cap rail, the varnished plank floor, the window
@@ -203,9 +205,9 @@ function spriteTexture(kind: SpriteKind): CanvasTexture {
   switch (kind) {
     case "heart": ctx.fillStyle = "#ff7a9a"; path("M32 54 C6 34 8 12 26 12 C32 12 32 20 32 20 C32 20 32 12 38 12 C56 12 58 34 32 54Z"); break;
     case "bubble": ctx.strokeStyle = "#bfe8ff"; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(32, 32, 20, 0, 7); ctx.stroke(); break;
-    case "note": ctx.fillStyle = "#8ab8ff"; ctx.font = "bold 44px serif"; ctx.fillText("♪", 32, 34); break;
+    case "note": ctx.fillStyle = "#8ab8ff"; ctx.font = __l10nCanvasFont("bold 44px serif"); ctx.fillText("♪", 32, 34); break;
     case "crumb": ctx.fillStyle = "#d9a441"; ctx.beginPath(); ctx.arc(32, 32, 12, 0, 7); ctx.fill(); break;
-    case "zzz": ctx.fillStyle = "#c9c4ff"; ctx.font = "bold 38px serif"; ctx.fillText("z", 32, 34); break;
+    case "zzz": ctx.fillStyle = "#c9c4ff"; ctx.font = __l10nCanvasFont("bold 38px serif"); ctx.fillText("z", 32, 34); break;
     case "star": ctx.fillStyle = "#ffd96a"; path("M32 8 L39 25 L57 25 L42 36 L47 54 L32 44 L17 54 L22 36 L7 25 L25 25 Z"); break;
     default: ctx.fillStyle = "#fff3b0"; path("M32 6 L38 26 L58 32 L38 38 L32 58 L26 38 L6 32 L26 26 Z"); break;
   }

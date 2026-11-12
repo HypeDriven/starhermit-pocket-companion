@@ -1,3 +1,4 @@
+import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // Pocket Companion on the StarHermit engine: the entry module (starhermit.txt
 // engine.entry), played natively by the StarHermit client and in browsers by
 // the engine's web runtime. The rules (src/rules.js), content
@@ -654,7 +655,7 @@ onUpdate((dt) => {
   if (app.caption && app.caption.until < t) app.caption = null;
   app.floats = app.floats.filter((f) => t - f.at < 1.1);
 });
-onRender(() => {
+onRender(__l10nRender(() => {
   hudRects.length = 0;
   const wasPlaying = app.screen === "game" && !app.overlays.length;
   // the hover/focus highlight on Mote follows the tray (set by screens.ts while it builds)
@@ -666,4 +667,8 @@ onRender(() => {
   render.setHighlight(legal ? legal.legal : null);
   const f = frame();
   render.update(frameDt, f.width, f.height, view);
-});
+}));
+
+// localization-runtime:menu
+import { installLanguageMenu as __installLanguageMenu } from "./l10n/menu.ts";
+__installLanguageMenu(false);
