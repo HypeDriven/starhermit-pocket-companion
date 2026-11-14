@@ -1,5 +1,7 @@
 # Pocket Companion
 
+**[▶ Play Pocket Companion on StarHermit](https://dashboard.starhermit.com/play/6184ac83-868e-476d-a2b6-6a0de5dee204)**
+
 A cozy companion-care game: feed, clean, entertain, and rest **Mote**, an expressive
 little creature living in a customizable room. Turn-based and fully deterministic —
 every session is a replayable, hash-verified log of your commands.
