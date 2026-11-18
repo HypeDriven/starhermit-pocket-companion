@@ -143,7 +143,7 @@ function keyOf(action: string): string {
 }
 
 // ------------------------------------------------------------------ the frame
-export function drawScreens(): void {
+function drawScreensImmediate(): void {
   const L = layoutNow();
   const f = frame();
   if (app.screen === "game") playScreen(L);
@@ -895,4 +895,11 @@ function profileScreen(w: number): void {
     }, { style: on ? "info-card-on" : "info-card", width: cw, spacing: 4 });
   });
   backBtn("title");
+}
+
+export function drawScreens(): void {
+  if (!(topOverlay() === "help")) { drawScreensImmediate(); return; }
+  const actions = ["slot1","slot2","slot3","slot4","slot5","slot6","slot7","slot8","slot9","slot10","hint","undo","camera","pause"];
+  const version = JSON.stringify([(app as any).settings ?? (app as any).options ?? {}, (platform as any).options ?? {}, actions.map((action) => bindings(action))]);
+  ui.retain!("help-screen", version, drawScreensImmediate);
 }
