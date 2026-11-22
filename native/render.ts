@@ -770,6 +770,7 @@ export function applyLook(next: Look): void {
     vignette: { amount: 0.24, inner: 0.38, outer: 0.9, scale: [1.1, 1] },
   } : null;
   renderer.antialias = next.antialias;
+  renderer.motionBlur = next.bloom !== null ? { intensity: 0.25, samples: 8, maxPixels: 16, targetFps: 60, camera: false } : null;
   // Background via scene.background; the post chain tone-maps it as the old composer did (engine.minor 29).
   scene.background = new Color(0x241d2b);
   if (particles.length > spriteCap(next)) particles.splice(0, particles.length - spriteCap(next));
