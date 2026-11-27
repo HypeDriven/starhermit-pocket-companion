@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-09-01T07:01:05.651348+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-26T21:46:01.967723+00:00",
+    "coverArtUpdatedAt": "2026-11-27T17:07:22.786926+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-26T21:46:01.956917+00:00",
+      "deployedAt": "2026-11-27T17:07:22.774767+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.51.0",
+      "engineVersion": "1.53.0",
       "deployWarning": null
     },
     "description": "Feed, clean, entertain, and rest a virtual companion while caring for its changing needs.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-26T21:46:02.290Z",
-  "sourceCommit": "c0f6ca0593d46cc25c6e502fcb8c596fe4531357",
-  "bytesReceived": 2265831,
-  "archiveSha256": "8d52ab72fbaec0084f91bf843b0db1c525cf8839babc4b4f584f3db88e343306",
+  "publishedAt": "2026-11-27T17:07:22.996Z",
+  "sourceCommit": "8e682699c398781faaa7e3d1233332eadc40c4d0",
+  "bytesReceived": 2265860,
+  "archiveSha256": "bea8f7b57de9fe6a9247676d90a29ebea238e9edc36a19868b1a8af8c2953fd6",
   "indexSha256": "24ab14bc39272fbfb5f0b773881620328f31d6a8ce2bf64e3a2f47a92e2e3b27",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 2265831,
+    "bytesReceived": 2265860,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.51.0",
+    "engineVersion": "1.53.0",
     "deployWarning": null
   },
   "liveVerification": {
