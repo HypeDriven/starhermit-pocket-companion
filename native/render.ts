@@ -854,6 +854,9 @@ function fitCamera(): void {
   probe.updateProjectionMatrix();
 }
 const tmp = new Vector3();
+const headPoint = new Vector3();
+const boxA = new Vector3(-0.7, 1.45, 0.3);
+const boxB = new Vector3(0.7, 0, 0.3);
 /** A world point in window pixels (through the playfield's camera), or null behind the camera. */
 function toWindow(v: Vector3): { x: number; y: number } | null {
   probe.position.copy(camera.position);
@@ -866,23 +869,25 @@ function toWindow(v: Vector3): { x: number; y: number } | null {
 /** render.js anchorToScreen('creature'): the point above Mote's head (window px). */
 export function creatureAnchor(): { x: number; y: number } | null {
   creature.getWorldPosition(tmp);
-  return toWindow(new Vector3(tmp.x, tmp.y + 1.7, tmp.z));
+  headPoint.set(tmp.x, tmp.y + 1.7, tmp.z);
+  return toWindow(headPoint);
 }
 /** Mote's on-screen box (window px) for its named target. */
 export function creatureRect(): Rect | null {
-  const a = toWindow(new Vector3(-0.7, 1.45, 0.3)), b = toWindow(new Vector3(0.7, 0, 0.3));
+  const a = toWindow(boxA), b = toWindow(boxB);
   if (!a || !b) return null;
   return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
 }
 const raycaster = new Raycaster();
+const hitNdc = new Vector2();
 /** render.js _tap: whether a window point hits Mote. */
 export function hitsCreature(x: number, y: number): boolean {
   if (!active || view.width < 2) return false;
   probe.position.copy(camera.position);
   probe.quaternion.copy(camera.quaternion);
   probe.updateMatrixWorld(true);
-  const ndc = new Vector2(((x - view.x) / view.width) * 2 - 1, -((y - view.y) / view.height) * 2 + 1);
-  raycaster.setFromCamera(ndc, probe);
+  hitNdc.set(((x - view.x) / view.width) * 2 - 1, -((y - view.y) / view.height) * 2 + 1);
+  raycaster.setFromCamera(hitNdc, probe);
   return raycaster.intersectObject(creature, true).length > 0;
 }
 
